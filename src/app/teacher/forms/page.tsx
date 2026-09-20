@@ -6,13 +6,14 @@ import { useLiveData } from '@/lib/store';
 import { getDb } from '@/lib/db';
 import {
   attendanceSummary,
+  type AttendanceSummaryRow,
   reportCard,
   rosterForSection,
   sectionsForTeacher,
   submitForm,
 } from '@/lib/queries';
 import { generalAverage, honorsFor, promotionRemark } from '@/lib/deped-grading';
-import { downloadCsv, printSection } from '@/lib/export';
+
 import { formatDateTime, fullName, todayIso } from '@/lib/format';
 import { Badge, Banner, Card, EmptyState, Loading, PageHeader, Tabs } from '@/components/ui';
 import { Icon } from '@/components/icons';
@@ -25,7 +26,9 @@ import {
   SF9Card,
   type PromotionRow,
 } from '@/components/school-forms';
-import type { FormType, Student } from '@/lib/types';
+import type { FormType, Section, Student, Tenant } from '@/lib/types';
+import { formPdfSpec, formWorkbookSpec, type FormContext } from '@/lib/form-specs';
+import { PdfButton, XlsxButton } from '@/components/export-buttons';
 
 const GENERATED: { id: FormType; label: string; description: string }[] = [
   { id: 'SF1', label: 'SF1 — School Register', description: 'Learner profile, guardian and enrolment data.' },
@@ -104,7 +107,7 @@ export default function FormsPage() {
     <>
       <PageHeader
         title="School Forms"
-        description="Forms are generated from records already captured — no re-encoding. Print to PDF or export to spreadsheet, then submit for the School Head's digital signature."
+        description="Forms are generated from records already captured — no re-encoding. Download a ready-to-file PDF or an Excel workbook, then submit for the School Head's digital signature."
       />
 
       <Tabs
@@ -165,19 +168,29 @@ export default function FormsPage() {
             </div>
             <p className="mt-3 text-sm text-slate-600">{activeMeta?.description}</p>
             <div className="mt-3 flex flex-wrap gap-2">
-              <button type="button" className="btn btn-sm btn-secondary" onClick={() => printSection('form-preview')}>
-                <Icon name="document" className="h-4 w-4" />
-                Print / Save as PDF
-              </button>
-              <button
-                type="button"
-                className="btn btn-sm btn-secondary"
+              <PdfButton
+                build={() => formPdfSpec(exportContext(formType, data, meta?.tenant ?? null))}
+                fallbackElementId="form-preview"
                 disabled={!data}
-                onClick={() => exportCsv(formType, data ?? null)}
-              >
-                <Icon name="download" className="h-4 w-4" />
-                Export CSV
-              </button>
+                onResult={(outcome) =>
+                  setNotice(
+                    outcome === 'pdf'
+                      ? `${formType} PDF downloaded.`
+                      : 'No connection — opened the print dialog instead (choose "Save as PDF").',
+                  )
+                }
+              />
+              <XlsxButton
+                build={() => formWorkbookSpec(exportContext(formType, data, meta?.tenant ?? null))}
+                disabled={!data}
+                onResult={(outcome) =>
+                  setNotice(
+                    outcome === 'xlsx'
+                      ? `${formType} workbook (.xlsx) downloaded.`
+                      : 'No connection — exported CSV from this device instead.',
+                  )
+                }
+              />
               <button
                 type="button"
                 className="btn btn-sm bg-deped-700 text-white"
@@ -277,59 +290,29 @@ export default function FormsPage() {
   );
 }
 
-type PreviewData = {
+interface PreviewData {
   roster: Student[];
-  summary: Awaited<ReturnType<typeof attendanceSummary>>;
+  section: Section | null;
+  summary: AttendanceSummaryRow[];
   promotion: PromotionRow[];
   card: Awaited<ReturnType<typeof reportCard>> | null;
-} | null;
+  activeStudent?: Student;
+}
 
-function exportCsv(formType: FormType, data: PreviewData) {
-  if (!data) return;
-  if (formType === 'SF1') {
-    downloadCsv(
-      'SF1-School-Register',
-      ['LRN', 'Name', 'Sex', 'Birth date', 'Mother tongue', 'IP', '4Ps', 'Address', 'Guardian', 'Contact'],
-      data.roster.map((s) => [
-        s.lrn, fullName(s), s.sex, s.birthDate, s.motherTongue, s.ipCommunity,
-        s.fourPs ? 'Yes' : 'No', s.address, s.guardianName, s.guardianContact,
-      ]),
-    );
-    return;
-  }
-  if (formType === 'SF2') {
-    downloadCsv(
-      'SF2-Attendance',
-      ['LRN', 'Name', 'Sex', 'Present', 'Absent', 'Late', 'Excused', 'Rate %'],
-      data.summary.map((r) => [
-        r.student.lrn, fullName(r.student), r.student.sex, r.present, r.absent, r.late, r.excused, r.rate.toFixed(1),
-      ]),
-    );
-    return;
-  }
-  if (formType === 'SF5') {
-    downloadCsv(
-      'SF5-Promotion',
-      ['LRN', 'Name', 'Sex', 'General average', 'Failed subjects', 'Action taken', 'Recognition'],
-      data.promotion.map((r) => [
-        r.student.lrn, fullName(r.student), r.student.sex, r.average, r.failedSubjects, r.remark, r.honors ?? '',
-      ]),
-    );
-    return;
-  }
-  if (data.card?.student) {
-    downloadCsv(
-      `${formType}-${data.card.student.lrn}`,
-      ['Learning area', 'Q1', 'Q2', 'Q3', 'Q4', 'Final', 'Remarks'],
-      data.card.rows.map((row) => [
-        row.subject.name,
-        row.quarters[1]?.quarterlyGrade ?? '',
-        row.quarters[2]?.quarterlyGrade ?? '',
-        row.quarters[3]?.quarterlyGrade ?? '',
-        row.quarters[4]?.quarterlyGrade ?? '',
-        row.final,
-        row.descriptor,
-      ]),
-    );
-  }
+/** Assembles what the shared form-spec builders need from this page's state. */
+function exportContext(
+  formType: FormType,
+  data: PreviewData | null | undefined,
+  tenant: Tenant | null,
+): FormContext {
+  return {
+    formType,
+    tenant,
+    section: data?.section ?? null,
+    roster: data?.roster ?? [],
+    summary: data?.summary ?? [],
+    promotion: data?.promotion ?? [],
+    card: data?.card ?? null,
+    period: formType === 'SF2' ? todayIso().slice(0, 7) : undefined,
+  };
 }

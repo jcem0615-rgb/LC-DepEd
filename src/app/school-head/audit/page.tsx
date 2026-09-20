@@ -4,10 +4,10 @@ import { useState } from 'react';
 import { useLiveData } from '@/lib/store';
 import { auditFeed } from '@/lib/queries';
 import { getDb } from '@/lib/db';
-import { downloadCsv } from '@/lib/export';
+import { workbook } from '@/lib/export';
+import { XlsxButton } from '@/components/export-buttons';
 import { formatDateTime } from '@/lib/format';
 import { Badge, Card, EmptyState, Loading, PageHeader, Toggle } from '@/components/ui';
-import { Icon } from '@/components/icons';
 
 export default function SchoolAuditPage() {
   const [onlyPii, setOnlyPii] = useState(false);
@@ -23,30 +23,32 @@ export default function SchoolAuditPage() {
         title="Audit trail"
         description="Every record access, export, signature and failed login, as required by the Data Privacy Act of 2012 (RA 10173)."
         actions={
-          <button
-            type="button"
-            className="btn btn-sm btn-secondary"
+          <XlsxButton
             disabled={!data?.logs.length}
-            onClick={() =>
-              data &&
-              downloadCsv(
+            label="Export audit trail"
+            build={() =>
+              workbook(
                 'audit-trail',
+                'Audit trail',
                 ['Timestamp', 'Actor', 'Role', 'Action', 'Target', 'PII', 'Outcome'],
-                data.logs.map((l) => [
+                (data?.logs ?? []).map((l) => [
                   formatDateTime(l.timestamp),
-                  data.names.get(l.actorId) ?? l.actorId,
+                  data?.names.get(l.actorId) ?? l.actorId,
                   l.actorRole,
                   l.action,
                   l.target,
                   l.piiAccessed ? 'Yes' : 'No',
                   l.outcome,
                 ]),
+                {
+                  sheetName: 'Audit',
+                  subtitle: 'Data Privacy Act of 2012 (RA 10173) access log',
+                  meta: [{ label: 'Entries', value: String(data?.logs.length ?? 0) }],
+                  notes: ['Audit records are append-only and hash-chained in the server deployment.'],
+                },
               )
             }
-          >
-            <Icon name="download" className="h-4 w-4" />
-            Export
-          </button>
+          />
         }
       />
 

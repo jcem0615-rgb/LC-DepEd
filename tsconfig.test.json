@@ -8,7 +8,9 @@
     "incremental": false,
     "outDir": ".test-build",
     "rootDir": ".",
-    "types": ["node"]
+    "types": [
+      "node"
+    ]
   },
   "include": [
     "src/lib/types.ts",
@@ -16,6 +18,8 @@
     "src/lib/crypto.ts",
     "src/lib/eid.ts",
     "src/lib/format.ts",
-    "tests/**/*.ts"
+    "tests/**/*.ts",
+    "src/lib/export-spec.ts",
+    "src/lib/form-specs.ts"
   ]
 }

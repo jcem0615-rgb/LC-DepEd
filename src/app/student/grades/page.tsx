@@ -4,10 +4,10 @@ import { useSession } from '@/components/providers';
 import { useLiveData } from '@/lib/store';
 import { getDb } from '@/lib/db';
 import { attendanceSummary, reportCard, studentForUser } from '@/lib/queries';
-import { printSection } from '@/lib/export';
+import { PdfButton, XlsxButton } from '@/components/export-buttons';
+import { formPdfSpec, formWorkbookSpec, sf9Context } from '@/lib/form-specs';
 import { Card, EmptyState, Loading, PageHeader } from '@/components/ui';
 import { FormHeader, SF9Card } from '@/components/school-forms';
-import { Icon } from '@/components/icons';
 
 export default function StudentGradesPage() {
   const { session } = useSession();
@@ -35,16 +35,25 @@ export default function StudentGradesPage() {
   if (loading) return <Loading rows={6} />;
   if (!data) return <EmptyState title="No learner record is linked to this account." />;
 
+  const reportContext = () =>
+    sf9Context({
+      student: data.student,
+      card: data.card,
+      attendance: data.attendance,
+      section: data.section,
+      tenant: data.tenant,
+    });
+
   return (
     <>
       <PageHeader
         title="Report card (SF9)"
         description="Quarterly grades computed with the DepEd Order No. 8, s. 2015 transmutation table."
         actions={
-          <button type="button" className="btn btn-sm btn-secondary" onClick={() => printSection('sf9')}>
-            <Icon name="document" className="h-4 w-4" />
-            Print / Save as PDF
-          </button>
+          <>
+            <PdfButton build={() => formPdfSpec(reportContext())} fallbackElementId="sf9" />
+            <XlsxButton build={() => formWorkbookSpec(reportContext())} />
+          </>
         }
       />
       <Card id="sf9">

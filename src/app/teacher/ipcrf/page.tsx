@@ -5,10 +5,9 @@ import { useSession } from '@/components/providers';
 import { useLiveData } from '@/lib/store';
 import { getDb } from '@/lib/db';
 import { submitForm } from '@/lib/queries';
-import { printSection } from '@/lib/export';
+import { PdfButton, XlsxButton } from '@/components/export-buttons';
 import { formatDateTime } from '@/lib/format';
 import { Badge, Banner, Card, PageHeader, ProgressBar } from '@/components/ui';
-import { Icon } from '@/components/icons';
 
 /** RPMS-PPST key result areas (weights per the DepEd RPMS tool for Teacher I-III). */
 const KRAS = [
@@ -71,7 +70,7 @@ function adjectival(rating: number): { label: string; tone: 'success' | 'info' |
 }
 
 export default function IpcrfPage() {
-  const { session } = useSession();
+  const { session, user } = useSession();
   const [ratings, setRatings] = useState<Record<string, number>>(() => {
     const initial: Record<string, number> = {};
     for (const kra of KRAS) kra.objectives.forEach((_, i) => (initial[`${kra.id}-${i}`] = 4));
@@ -104,16 +103,83 @@ export default function IpcrfPage() {
   const verdict = adjectival(result.final);
   const completeness = Math.round((evidence.length / EVIDENCE.length) * 100);
 
+  const ratingRows = () =>
+    KRAS.flatMap((kra) =>
+      kra.objectives.map((objective, i) => [
+        kra.title.split(' — ')[0],
+        objective,
+        kra.weight,
+        ratings[`${kra.id}-${i}`] ?? 0,
+      ]),
+    );
+
+  const exportMeta = () => [
+    { label: 'Ratee', value: user?.name ?? session?.name ?? '—' },
+    { label: 'Position', value: user?.position ?? 'Teacher' },
+    { label: 'Review period', value: 'Mid-year Review' },
+    { label: 'Final rating', value: `${result.final.toFixed(3)} (${verdict.label})` },
+    { label: 'Evidence attached', value: `${evidence.length} of ${EVIDENCE.length}` },
+  ];
+
+  const buildPdf = () => ({
+    filename: `IPCRF-${(user?.name ?? 'teacher').replace(/\s+/g, '-')}`,
+    code: 'IPCRF',
+    title: 'Individual Performance Commitment and Review Form',
+    subtitle: 'RPMS-PPST • Mid-year Review',
+    meta: exportMeta(),
+    columns: [
+      { header: 'KRA', width: 10 },
+      { header: 'Objective', width: 60 },
+      { header: 'Weight %', width: 10, align: 'right' as const },
+      { header: 'Rating (1-5)', width: 12, align: 'center' as const },
+    ],
+    rows: ratingRows(),
+    totals: ['', 'WEIGHTED FINAL RATING', '', result.final.toFixed(3)],
+    notes: [
+      `Adjectival equivalent: ${verdict.label}.`,
+      `Portfolio evidence attached: ${evidence.join('; ') || 'none'}.`,
+      'Weighted across KRA 1-4 (20/20/30/30) on the 5-point RPMS scale.',
+    ],
+    signatures: ['Ratee', 'Rater'],
+    footer: 'LC-DepEd • IPCRF / RPMS',
+  });
+
+  const buildWorkbook = () => ({
+    filename: `IPCRF-${(user?.name ?? 'teacher').replace(/\s+/g, '-')}`,
+    title: 'IPCRF / RPMS portfolio',
+    subtitle: `Final rating ${result.final.toFixed(3)} — ${verdict.label}`,
+    sheets: [
+      {
+        name: 'Ratings',
+        columns: [
+          { header: 'KRA' },
+          { header: 'Objective' },
+          { header: 'Weight %', align: 'right' as const },
+          { header: 'Rating (1-5)', align: 'center' as const },
+        ],
+        rows: ratingRows(),
+        totals: ['', 'WEIGHTED FINAL RATING', '', result.final.toFixed(3)],
+        meta: exportMeta(),
+      },
+      {
+        name: 'Evidence',
+        columns: [{ header: 'Portfolio evidence' }, { header: 'Attached' }],
+        rows: EVIDENCE.map((item) => [item, evidence.includes(item) ? 'Yes' : 'No']),
+        notes: [`Completeness: ${completeness}%`],
+      },
+    ],
+  });
+
   return (
     <>
       <PageHeader
         title="IPCRF / RPMS portfolio"
         description="Self-rate each RPMS-PPST objective; the weighted final rating and its adjectival equivalent are computed as you go."
         actions={
-          <button type="button" className="btn btn-sm btn-secondary" onClick={() => printSection('ipcrf-sheet')}>
-            <Icon name="document" className="h-4 w-4" />
-            Print / Save as PDF
-          </button>
+          <>
+            <PdfButton build={buildPdf} fallbackElementId="ipcrf-sheet" />
+            <XlsxButton build={buildWorkbook} />
+          </>
         }
       />
 

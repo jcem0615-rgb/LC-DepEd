@@ -3,10 +3,10 @@
 import { useLiveData } from '@/lib/store';
 import { auditFeed } from '@/lib/queries';
 import { getDb, getSetting } from '@/lib/db';
-import { downloadCsv } from '@/lib/export';
+
+import { XlsxButton } from '@/components/export-buttons';
 import { formatDateTime } from '@/lib/format';
 import { Badge, Banner, Card, Loading, PageHeader, ProgressBar, StatTile } from '@/components/ui';
-import { Icon } from '@/components/icons';
 import { ROLE_PERMISSIONS } from '@/lib/auth';
 import type { Role } from '@/lib/types';
 
@@ -51,24 +51,48 @@ export default function PrivacyPage() {
         title="Data privacy control room"
         description="Centralised RA 10173 oversight: who touched personal data, what left the system, and which controls still need attention."
         actions={
-          <button
-            type="button"
-            className="btn btn-sm btn-secondary"
-            onClick={() =>
-              downloadCsv(
-                'pii-access-log',
-                ['Timestamp', 'Actor', 'Role', 'Action', 'Target', 'Outcome'],
-                pii.map((l) => [
-                  formatDateTime(l.timestamp),
-                  data.names.get(l.actorId) ?? l.actorId,
-                  l.actorRole, l.action, l.target, l.outcome,
-                ]),
-              )
-            }
-          >
-            <Icon name="download" className="h-4 w-4" />
-            Export PII log
-          </button>
+          <XlsxButton
+            label="Export privacy pack"
+            build={() => ({
+              filename: 'privacy-control-room',
+              title: 'Data privacy control room',
+              subtitle: 'RA 10173 oversight pack',
+              sheets: [
+                {
+                  name: 'PII access',
+                  columns: [
+                    { header: 'Timestamp' }, { header: 'Actor' }, { header: 'Role' },
+                    { header: 'Action' }, { header: 'Target' }, { header: 'Outcome' },
+                  ],
+                  rows: pii.map((l) => [
+                    formatDateTime(l.timestamp),
+                    data.names.get(l.actorId) ?? l.actorId,
+                    l.actorRole, l.action, l.target, l.outcome,
+                  ]),
+                  meta: [
+                    { label: 'PII access events', value: String(pii.length) },
+                    { label: 'Data exports', value: String(exports.length) },
+                    { label: 'Failed logins', value: String(failures.length) },
+                    { label: 'Blocked by RBAC', value: String(denied.length) },
+                  ],
+                },
+                {
+                  name: 'Compliance',
+                  columns: [{ header: 'Control' }, { header: 'Status' }],
+                  rows: COMPLIANCE.map((c) => [c.item, c.done ? 'Done' : 'Open']),
+                  notes: [`Compliance score: ${complianceScore}%`],
+                },
+                {
+                  name: 'Permission matrix',
+                  columns: [{ header: 'Role' }, { header: 'Granted permissions' }],
+                  rows: (Object.keys(ROLE_PERMISSIONS) as Role[]).map((role) => [
+                    role,
+                    ROLE_PERMISSIONS[role].join(', '),
+                  ]),
+                },
+              ],
+            })}
+          />
         }
       />
 

@@ -79,8 +79,52 @@ mean of final grades; honours follow DepEd Order No. 36, s. 2016.
 | SF9 Report Card | quarterly grades + attendance summary |
 | SF10 Permanent Record | scholastic record across school years |
 
-Output is CSV (UTF-8 with BOM for Excel) and browser print-to-PDF scoped to the
-rendered form via a print stylesheet.
+### Document rendering
+
+Each form has exactly one projection — `formTable()` in `src/lib/form-specs.ts` —
+and both output formats consume it, so the spreadsheet, the PDF and the on-screen
+table can never drift apart. The Student, Parent and Teacher portals all build the
+same SF9 through `sf9Context()`.
+
+```
+Dexie records ──► formTable() ──┬──► formWorkbookSpec() ──► POST /api/export/xlsx ──► ExcelJS ──► .xlsx
+                                ├──► formPdfSpec()      ──► POST /api/export/pdf  ──► PDFKit  ──► .pdf
+                                └──► React table                                            ──► screen
+```
+
+**Why server-side.** ExcelJS and PDFKit together are several megabytes. Shipping
+them to a phone on 3G to save one attendance report would defeat the bandwidth
+budget the rest of the app is designed around, so the rendering lives behind two
+route handlers and the device downloads a finished file.
+
+**Why they are safe.** Both endpoints are stateless: they format the payload the
+caller already holds and never touch the database, so calling them grants no
+access to learner data. Both bound every dimension of the request before any
+rendering starts — sheets, rows, columns, cell length, note count, image bytes,
+orientation — and sanitise the download filename so it cannot escape the
+directory (`safeFilename`) or break Excel's sheet-name rules (`safeSheetName`).
+`tests/export-spec.test.ts` pins that contract. In production the routes sit
+behind the session check and the `forms:export` permission.
+
+**Offline.** Exports are the one feature that genuinely needs the network, so
+each button degrades instead of failing: the XLSX button writes a UTF-8 CSV (with
+BOM, so Excel reads accents correctly) from data already on the device, and the
+PDF button opens the browser print dialog scoped to the rendered form through a
+print stylesheet. The button label reports which path it took.
+
+**XLSX specifics.** Title and meta block above the table, brand-filled bold header
+row, frozen panes and an autofilter on the header, column widths derived from the
+longest value, numeric cells written as numbers (not strings) with a `0.0"%"`
+format for rates, a shaded totals row, and italic notes underneath. Multi-sheet
+packs are used where a single table would lose context — the division report
+carries Enrolment / Report intake / Dropout risk, and the privacy pack carries PII
+access / Compliance / Permission matrix.
+
+**PDF specifics.** A4, portrait or landscape chosen by column count, DepEd header
+block, two-column meta grid, a table whose header repeats on every page, automatic
+pagination with `Page n of m` numbering, notes, and signature rules. The learner
+e-ID card embeds the QR as a PNG — and deliberately embeds the *static*
+signature, because a rotating 30-second code would be void before the ink dried.
 
 ---
 
@@ -146,9 +190,10 @@ drives the anonymisation job; audit entries are retained independently.
 
 ## 5. Testing
 
-- `npm test` — 17 unit tests over the transmutation table, component weighting,
-  promotion/honours rules, and e-ID signing, drift tolerance, tampering, expiry and
-  static-card behaviour.
+- `npm test` — 25 unit tests over the transmutation table, component weighting,
+  promotion/honours rules, e-ID signing, drift tolerance, tampering, expiry and
+  static-card behaviour, plus the export contract (filename and sheet-name
+  sanitising, every size limit, and the image allow-list).
 - `npm run typecheck` — strict TypeScript across the app.
 - `npm run build` — all routes prerender.
 
@@ -158,3 +203,11 @@ grading, form generation and approval, DLL, IPCRF, NTP routing, LIS sync, intake
 revalidation, tenant provisioning, flags, VAPID rotation), and PWA behaviour:
 service-worker activation, offline navigation from cache, offline writes landing in
 the queue, automatic drain on reconnect, and the offline fallback page.
+
+Every export button was driven in the browser and the downloaded files inspected:
+the workbooks were re-opened with an independent Excel parser (sheet names, frozen
+panes, autofilters, column widths, typed numeric cells, number formats, header
+fill), and the PDFs were parsed for page count, repeated table headers across
+pages, expected text, embedded images, page numbering, and text drawn outside the
+page box. The offline path was exercised with the network disabled to confirm the
+CSV and print fallbacks.

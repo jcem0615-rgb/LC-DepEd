@@ -6,7 +6,8 @@ import { useLiveData, notifyChange } from '@/lib/store';
 import { getDb } from '@/lib/db';
 import { randomId } from '@/lib/crypto';
 import { logAudit } from '@/lib/audit';
-import { downloadCsv } from '@/lib/export';
+import { workbook } from '@/lib/export';
+import { XlsxButton } from '@/components/export-buttons';
 import { formatDate } from '@/lib/format';
 import { Badge, Banner, Card, Loading, PageHeader } from '@/components/ui';
 import { Icon } from '@/components/icons';
@@ -80,25 +81,31 @@ export default function TenantsPage() {
         title="Schools &amp; tenants"
         description="Provision schools, manage division and regional accounts, and control tenant lifecycle. Each school is isolated by PostgreSQL Row-Level Security."
         actions={
-          <button
-            type="button"
-            className="btn btn-sm btn-secondary"
+          <XlsxButton
             disabled={!data?.tenants.length}
-            onClick={() =>
-              data &&
-              downloadCsv(
+            label="Export tenants"
+            build={() =>
+              workbook(
                 'tenants',
+                'Schools and tenants',
                 ['School ID', 'Name', 'Division', 'Region', 'District', 'Enrolment', 'Status', 'Created'],
-                data.tenants.map((t) => [
+                (data?.tenants ?? []).map((t) => [
                   t.schoolId, t.name, t.division, t.region, t.district, t.enrollment, t.status,
                   formatDate(t.createdAt),
                 ]),
+                {
+                  sheetName: 'Tenants',
+                  meta: [
+                    { label: 'Schools', value: String(data?.tenants.length ?? 0) },
+                    {
+                      label: 'Active',
+                      value: String((data?.tenants ?? []).filter((t) => t.status === 'active').length),
+                    },
+                  ],
+                },
               )
             }
-          >
-            <Icon name="download" className="h-4 w-4" />
-            Export
-          </button>
+          />
         }
       />
 

@@ -5,10 +5,11 @@ import { useSession } from '@/components/providers';
 import { useLiveData } from '@/lib/store';
 import { studentForUser } from '@/lib/queries';
 import { buildEid, EID_PERIOD_SECONDS, secondsRemaining } from '@/lib/eid';
-import { printSection } from '@/lib/export';
+import { PdfButton } from '@/components/export-buttons';
 import { formatDate, fullName } from '@/lib/format';
+import { SCHOOL_YEAR } from '@/data/seed';
 import { Badge, Banner, Card, EmptyState, Loading, PageHeader, ProgressBar, Tabs } from '@/components/ui';
-import { QrCode } from '@/components/qr-code';
+import { QrCode, qrDataUrl } from '@/components/qr-code';
 import { Icon } from '@/components/icons';
 
 export default function EidPage() {
@@ -58,10 +59,42 @@ export default function EidPage() {
         title="My student e-ID"
         description="A signed QR code that proves who you are at the school gate. Nothing personal is stored in the code itself — only your LRN and a rotating HMAC-SHA256 signature."
         actions={
-          <button type="button" className="btn btn-sm btn-secondary" onClick={() => printSection('eid-card')}>
-            <Icon name="document" className="h-4 w-4" />
-            Print ID card
-          </button>
+          <PdfButton
+            label="Print ID card (PDF)"
+            fallbackElementId="eid-card"
+            build={async () => {
+              // Printed cards always carry the non-expiring static signature —
+              // a rotating code would be void before the ink dried.
+              const printable = await buildEid(student.lrn, student.qrSecret, 'static');
+              return {
+                filename: `eID-${student.lrn}`,
+                code: 'Learner e-ID',
+                title: fullName(student),
+                subtitle: `Grade ${student.gradeLevel} • School Year ${SCHOOL_YEAR}`,
+                meta: [
+                  { label: 'LRN', value: student.lrn },
+                  { label: 'Sex', value: student.sex === 'M' ? 'Male' : 'Female' },
+                  { label: 'Date of birth', value: formatDate(student.birthDate) },
+                  { label: 'Mother tongue', value: student.motherTongue },
+                ],
+                image: {
+                  dataUrl: await qrDataUrl(printable, 512),
+                  width: 190,
+                  caption: 'Present this card at the school gate.',
+                },
+                columns: [],
+                rows: [],
+                tableOptional: true,
+                notes: [
+                  'This printed card carries a static HMAC-SHA256 signature that does not expire.',
+                  'The card encodes only the Learner Reference Number and its signature — no name, address or contact number.',
+                  'If the card is lost, ask the school to re-issue the learner secret; the old card stops verifying immediately.',
+                ],
+                signatures: ['Learner signature', 'School head'],
+                footer: 'LC-DepEd • Learner e-ID',
+              };
+            }}
+          />
         }
       />
 

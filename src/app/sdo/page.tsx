@@ -2,12 +2,12 @@
 
 import { useLiveData } from '@/lib/store';
 import { divisionAnalytics } from '@/lib/queries';
-import { downloadCsv } from '@/lib/export';
+
+import { XlsxButton } from '@/components/export-buttons';
 import { compactNumber, maskLrn } from '@/lib/format';
 import { getDb } from '@/lib/db';
 import { Badge, Banner, Card, Loading, PageHeader, StatTile } from '@/components/ui';
 import { BarChart, Donut } from '@/components/charts';
-import { Icon } from '@/components/icons';
 
 export default function SdoAnalyticsPage() {
   const { data, loading } = useLiveData(async () => {
@@ -39,20 +39,51 @@ export default function SdoAnalyticsPage() {
         title="Division analytics"
         description="Live enrolment, attendance and dropout-risk indicators across every school reporting to this division."
         actions={
-          <button
-            type="button"
-            className="btn btn-sm btn-secondary"
-            onClick={() =>
-              downloadCsv(
-                'division-enrolment',
-                ['School ID', 'School', 'Division', 'Region', 'District', 'Enrolment', 'Status'],
-                a.tenants.map((t) => [t.schoolId, t.name, t.division, t.region, t.district, t.enrollment, t.status]),
-              )
-            }
-          >
-            <Icon name="download" className="h-4 w-4" />
-            Export enrolment
-          </button>
+          <XlsxButton
+            label="Export division report"
+            build={() => ({
+              filename: 'division-report',
+              title: 'Division analytics',
+              subtitle: 'Enrolment, intake status and anonymised dropout risk',
+              sheets: [
+                {
+                  name: 'Enrolment',
+                  columns: [
+                    { header: 'School ID' }, { header: 'School' }, { header: 'Division' },
+                    { header: 'Region' }, { header: 'District' },
+                    { header: 'Enrolment', align: 'right' }, { header: 'Status' },
+                  ],
+                  rows: a.tenants.map((t) => [
+                    t.schoolId, t.name, t.division, t.region, t.district, t.enrollment, t.status,
+                  ]),
+                  totals: ['', '', '', '', 'TOTAL', a.enrollment, ''],
+                },
+                {
+                  name: 'Report intake',
+                  columns: [
+                    { header: 'School' }, { header: 'Report type' }, { header: 'Period' },
+                    { header: 'Rows', align: 'right' }, { header: 'Status' }, { header: 'Findings' },
+                  ],
+                  rows: a.reports.map((r) => [
+                    r.schoolName, r.type, r.period, r.rows, r.status, r.findings.join('; '),
+                  ]),
+                },
+                {
+                  name: 'Dropout risk',
+                  columns: [
+                    { header: 'Masked LRN' }, { header: 'Grade', align: 'right' },
+                    { header: 'Sex', align: 'center' }, { header: 'Risk driver' },
+                    { header: 'Recommended action' },
+                  ],
+                  rows: data.atRisk.map((s) => [
+                    maskLrn(s!.lrn), s!.gradeLevel, s!.sex, 'Chronic absence',
+                    'Home visit + Project SPEED referral',
+                  ]),
+                  notes: ['Learner identifiers are masked under RA 10173 — division staff see risk, not identities.'],
+                },
+              ],
+            })}
+          />
         }
       />
 

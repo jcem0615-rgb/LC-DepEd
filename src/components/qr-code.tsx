@@ -3,6 +3,16 @@
 import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 
+/** Generates a QR PNG data URL — used for printable documents. */
+export function qrDataUrl(value: string, size = 512): Promise<string> {
+  return QRCode.toDataURL(value, {
+    errorCorrectionLevel: 'M',
+    margin: 1,
+    width: size,
+    color: { dark: '#0f172a', light: '#ffffff' },
+  });
+}
+
 /** Renders a QR payload as a PNG data URL; regenerates whenever the value changes. */
 export function QrCode({
   value,

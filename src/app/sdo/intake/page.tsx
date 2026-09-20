@@ -5,7 +5,8 @@ import { useSession } from '@/components/providers';
 import { useLiveData, notifyChange } from '@/lib/store';
 import { getDb } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
-import { downloadCsv } from '@/lib/export';
+import { workbook } from '@/lib/export';
+import { XlsxButton } from '@/components/export-buttons';
 import { formatDateTime } from '@/lib/format';
 import { Badge, Banner, Card, EmptyState, Loading, PageHeader, StatTile } from '@/components/ui';
 import { Icon } from '@/components/icons';
@@ -63,25 +64,30 @@ export default function IntakePage() {
         title="Automated report intake"
         description="Uploads from schools are ingested and rule-checked automatically. Division staff only handle the exceptions."
         actions={
-          <button
-            type="button"
-            className="btn btn-sm btn-secondary"
+          <XlsxButton
             disabled={!reports?.length}
-            onClick={() =>
-              reports &&
-              downloadCsv(
+            label="Export intake log"
+            build={() =>
+              workbook(
                 'division-intake',
+                'Automated report intake log',
                 ['School', 'Report type', 'Period', 'Rows', 'Received', 'Status', 'Findings'],
-                reports.map((r) => [
+                (reports ?? []).map((r) => [
                   r.schoolName, r.type, r.period, r.rows, formatDateTime(r.receivedAt), r.status,
                   r.findings.join('; '),
                 ]),
+                {
+                  sheetName: 'Intake',
+                  meta: [
+                    { label: 'Validated', value: String(counts.validated) },
+                    { label: 'Flagged', value: String(counts.flagged) },
+                    { label: 'Rejected', value: String(counts.rejected) },
+                    { label: 'Pending', value: String(counts.pending) },
+                  ],
+                },
               )
             }
-          >
-            <Icon name="download" className="h-4 w-4" />
-            Export intake log
-          </button>
+          />
         }
       />
 

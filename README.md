@@ -9,8 +9,8 @@ Six role-based portals ship in one installable app:
 
 | Portal | What it does |
 | --- | --- |
-| **Teacher** | One-tap attendance, DO 8 s. 2015 class record, SF1/SF2/SF5/SF9/SF10 generation, MATATAG Daily Lesson Log builder with voice input, IPCRF/RPMS portfolio |
-| **Learner** | Grades and attendance, dynamic HMAC-signed e-ID QR, offline Self-Learning Kits |
+| **Teacher** | One-tap attendance, DO 8 s. 2015 class record, SF1/SF2/SF5/SF9/SF10 generation as real .xlsx and PDF, MATATAG Daily Lesson Log builder with voice input, IPCRF/RPMS portfolio |
+| **Learner** | Grades and attendance, dynamic HMAC-signed e-ID QR, printable PDF ID card, offline Self-Learning Kits |
 | **Parent / Guardian** | Real-time gate push alerts, signed SF9 report card, adviser messaging, 1-tap dialect switch |
 | **School Head** | Approval hub with batch digital signing, NTP task routing (DO 2, s. 2024), LIS sync, school audit trail |
 | **SDO / Regional Office** | Automated report intake with rule validation, division analytics, dropout-risk watchlist, security console |
@@ -49,9 +49,11 @@ messaging flows that need two teachers.
    **Submit for approval**.
 4. Sign in as the **school head** → **Approval hub** → select all → **Batch sign**.
 5. Sign in as the **learner** → **My e-ID**. The QR rotates every 30 seconds.
-6. Open `/scanner` as the teacher or school head, paste that e-ID payload into
+6. Back in **School Forms**, hit **Export XLSX** and **Download PDF** on any form —
+   both are generated server-side and open in Excel and any PDF reader.
+7. Open `/scanner` as the teacher or school head, paste that e-ID payload into
    manual entry — it verifies, chimes, and pushes an alert.
-7. Sign in as the **parent** → **Gate Alerts** to see the notification land.
+8. Sign in as the **parent** → **Gate Alerts** to see the notification land.
 
 ---
 
@@ -95,6 +97,33 @@ Both are optional — the app runs fully without them.
   password hashing, no crypto dependencies.
 - **No chart library** — the dashboards draw their own SVG, keeping the payload
   small on 3G.
+- **ExcelJS + PDFKit behind two route handlers** — real `.xlsx` and PDF rendering
+  stays on the server, so the phone downloads a finished file instead of a
+  megabyte of formatting code.
+
+### Exports
+
+`Export XLSX` and `Download PDF` appear wherever a portal produces a document:
+the five School Forms, the SF2 attendance summary, the class record, the IPCRF
+portfolio, the learner's report card in both the Student and Parent portals, the
+approval register, the LIS transmittal, the audit trails, and the division and
+privacy packs.
+
+| | Produced by | Notes |
+| --- | --- | --- |
+| `.xlsx` | `POST /api/export/xlsx` (ExcelJS) | Styled header, frozen panes, autofilter, sized columns, typed numeric cells, multi-sheet packs |
+| `.pdf` | `POST /api/export/pdf` (PDFKit) | A4 portrait or landscape, repeating table headers across pages, page numbering, signature lines, optional embedded image (the e-ID card) |
+
+Both endpoints are **stateless** — they format the payload the client already
+holds and never read the database, so generating a document grants the server no
+access to learner data it did not already have. Both bound every dimension of the
+request (sheets, rows, columns, cell length, image size) before rendering. A
+production deployment puts the session check and the `forms:export` permission in
+front of them; the portals already write the export to the audit trail.
+
+**Offline, exports still work.** With no connection the XLSX button saves a CSV
+from the device and the PDF button opens the print dialog scoped to the form on
+screen. The button says which path it took.
 
 ### What is real and what is simulated
 
@@ -107,13 +136,16 @@ infrastructure, the demo build stands in for the backend in three places:
 | Persistence | IndexedDB via Dexie | PostgreSQL with Row-Level Security — schema in [`db/schema.sql`](db/schema.sql) |
 | Sync upload | Queue drains against a simulated round-trip | `POST {NEXT_PUBLIC_API_BASE}/sync` with the same queue records |
 | Push delivery | Service-worker local notifications | VAPID Web Push from the server |
+| Document export | Real — the same ExcelJS/PDFKit routes run in both | Add the session check in front of the route |
 
-Everything else — the grading engine, transmutation table, form generation, e-ID
-signing and verification, RBAC, audit logging, offline queueing and PWA install —
-is the real implementation and runs unchanged in production.
+Everything else — the grading engine, transmutation table, form generation, XLSX
+and PDF rendering, e-ID signing and verification, RBAC, audit logging, offline
+queueing and PWA install — is the real implementation and runs unchanged in
+production.
 
-Exports are CSV (UTF-8 with BOM, opens directly in Excel) and print-to-PDF through
-the browser, so no document-generation service is required.
+Because the export endpoints are route handlers, the app needs a Node runtime
+(`npm start`, a container, or any Node host). It is no longer a pure static
+export; everything except `/api/export/*` still prerenders as static HTML.
 
 ---
 
@@ -124,11 +156,16 @@ src/
   app/                     route groups, one folder per portal
     login/ offline/ scanner/
     teacher/ student/ parent/ school-head/ sdo/ superadmin/
-  components/              app shell, UI primitives, SVG charts, school forms, QR
+    api/export/xlsx/       ExcelJS workbook renderer
+    api/export/pdf/        PDFKit document renderer
+  components/              app shell, UI primitives, SVG charts, school forms, QR,
+                           export buttons with offline fallbacks
   lib/
     deped-grading.ts       DO 8 s. 2015 weights + transmutation table
     eid.ts                 dynamic/static e-ID signing and verification
     crypto.ts              HMAC, AES-256-GCM, PBKDF2 over Web Crypto
+    export-spec.ts         shared export contract + input validation
+    form-specs.ts          SF1/SF2/SF5/SF9/SF10 projections for XLSX and PDF
     db.ts  store.ts        Dexie schema, seeding, reactive query hook
     queries.ts             reads and mutations shared by the portals
     sync.ts  audit.ts      offline queue, RA 10173 audit trail
@@ -137,7 +174,7 @@ src/
   data/seed.ts             deterministic synthetic school
 db/schema.sql              PostgreSQL schema with RLS and anonymising views
 docs/ARCHITECTURE.md       sync strategy, e-ID protocol, RBAC, privacy design
-tests/                     grading and e-ID unit tests (node:test)
+tests/                     grading, e-ID and export-contract unit tests (node:test)
 ```
 
 ---

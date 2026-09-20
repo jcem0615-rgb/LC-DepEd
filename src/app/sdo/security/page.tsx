@@ -4,10 +4,10 @@ import { useState } from 'react';
 import { useLiveData } from '@/lib/store';
 import { auditFeed } from '@/lib/queries';
 import { getDb } from '@/lib/db';
-import { downloadCsv } from '@/lib/export';
+import { workbook } from '@/lib/export';
+import { XlsxButton } from '@/components/export-buttons';
 import { formatDateTime } from '@/lib/format';
 import { Badge, Banner, Card, Loading, PageHeader, StatTile } from '@/components/ui';
-import { Icon } from '@/components/icons';
 
 const FILTERS = ['all', 'pii', 'denied', 'failure'] as const;
 type Filter = (typeof FILTERS)[number];
@@ -37,25 +37,27 @@ export default function SecurityConsolePage() {
         title="Security console"
         description="Immutable division-wide audit log of PII access, exports and authentication failures."
         actions={
-          <button
-            type="button"
-            className="btn btn-sm btn-secondary"
+          <XlsxButton
             disabled={!logs.length}
-            onClick={() =>
-              downloadCsv(
+            label="Export security log"
+            build={() =>
+              workbook(
                 'division-audit',
+                'Division security console log',
                 ['Timestamp', 'Actor', 'Role', 'Action', 'Target', 'PII', 'Outcome'],
                 logs.map((l) => [
                   formatDateTime(l.timestamp),
                   data?.names.get(l.actorId) ?? l.actorId,
                   l.actorRole, l.action, l.target, l.piiAccessed ? 'Yes' : 'No', l.outcome,
                 ]),
+                {
+                  sheetName: 'Security',
+                  subtitle: 'Immutable audit log — RA 10173',
+                  meta: [{ label: 'Filter', value: filter }, { label: 'Entries', value: String(logs.length) }],
+                },
               )
             }
-          >
-            <Icon name="download" className="h-4 w-4" />
-            Export
-          </button>
+          />
         }
       />
 

@@ -5,7 +5,8 @@ import { useSession } from '@/components/providers';
 import { useLiveData } from '@/lib/store';
 import { getDb, getSetting, setSetting } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
-import { downloadCsv } from '@/lib/export';
+import { workbook } from '@/lib/export';
+import { XlsxButton } from '@/components/export-buttons';
 import { formatDateTime, fullName } from '@/lib/format';
 import { Badge, Banner, Card, Loading, PageHeader, ProgressBar, StatTile } from '@/components/ui';
 import { Icon } from '@/components/icons';
@@ -73,24 +74,30 @@ export default function LisSyncPage() {
         title="LIS integration"
         description="Push enrolment and transfer data to the DepEd Learner Information System once validation passes."
         actions={
-          <button
-            type="button"
-            className="btn btn-sm btn-secondary"
-            onClick={() =>
-              downloadCsv(
+          <XlsxButton
+            label="Export LIS file"
+            build={() =>
+              workbook(
                 'LIS-enrolment-export',
+                'LIS enrolment export',
                 ['LRN', 'Last name', 'First name', 'Middle name', 'Sex', 'Birth date', 'Grade level', 'Section', 'Address', 'Guardian', 'Contact'],
                 data.students.map((s) => [
                   s.lrn, s.lastName, s.firstName, s.middleName, s.sex, s.birthDate,
                   s.gradeLevel, data.sections.find((sec) => sec.id === s.sectionId)?.name ?? '',
                   s.address, s.guardianName, s.guardianContact,
                 ]),
+                {
+                  sheetName: 'Enrolment',
+                  subtitle: 'Learner Information System transmittal',
+                  meta: [
+                    { label: 'Learners', value: String(data.students.length) },
+                    { label: 'Sections', value: String(data.sections.length) },
+                  ],
+                  notes: ['Contains personal data — handle under RA 10173 and delete local copies after transmittal.'],
+                },
               )
             }
-          >
-            <Icon name="download" className="h-4 w-4" />
-            Export LIS file
-          </button>
+          />
         }
       />
 

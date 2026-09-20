@@ -5,7 +5,8 @@ import { useSession } from '@/components/providers';
 import { useLiveData } from '@/lib/store';
 import { getDb } from '@/lib/db';
 import { setFormStatus } from '@/lib/queries';
-import { downloadCsv, printSection } from '@/lib/export';
+import { workbook } from '@/lib/export';
+import { PdfButton, XlsxButton } from '@/components/export-buttons';
 import { formatDateTime } from '@/lib/format';
 import { Badge, Banner, Card, EmptyState, Loading, PageHeader, Tabs } from '@/components/ui';
 import { Icon } from '@/components/icons';
@@ -87,14 +88,13 @@ export default function ApprovalsPage() {
               >
                 {allSelected ? 'Clear selection' : 'Select all'}
               </button>
-              <button
-                type="button"
-                className="btn btn-sm btn-secondary"
+              <XlsxButton
                 disabled={visible.length === 0}
-                onClick={() =>
-                  downloadCsv(
+                build={() =>
+                  workbook(
                     `forms-${tab}`,
-                    ['Type', 'Title', 'Period', 'Submitted by', 'Submitted at', 'Status'],
+                    `School forms — ${tab}`,
+                    ['Type', 'Title', 'Period', 'Submitted by', 'Submitted at', 'Status', 'Signed at', 'Remarks'],
                     visible.map((f) => [
                       f.type,
                       f.title,
@@ -102,16 +102,51 @@ export default function ApprovalsPage() {
                       data.names.get(f.submittedBy) ?? f.submittedBy,
                       formatDateTime(f.submittedAt),
                       f.status,
+                      f.signedAt ? formatDateTime(f.signedAt) : '',
+                      f.remarks ?? '',
                     ]),
+                    {
+                      sheetName: tab,
+                      meta: [
+                        { label: 'Queue', value: tab },
+                        { label: 'Forms', value: String(visible.length) },
+                      ],
+                    },
                   )
                 }
-              >
-                <Icon name="download" className="h-4 w-4" />
-                Export
-              </button>
-              <button type="button" className="btn btn-sm btn-secondary" onClick={() => printSection('approval-list')}>
-                Print
-              </button>
+              />
+              <PdfButton
+                disabled={visible.length === 0}
+                fallbackElementId="approval-list"
+                build={() => ({
+                  filename: `forms-${tab}`,
+                  title: 'School forms — approval register',
+                  subtitle: `Queue: ${tab}`,
+                  meta: [
+                    { label: 'Queue', value: tab },
+                    { label: 'Forms', value: String(visible.length) },
+                  ],
+                  columns: [
+                    { header: 'Type', width: 8 },
+                    { header: 'Title', width: 40 },
+                    { header: 'Period', width: 14 },
+                    { header: 'Submitted by', width: 22 },
+                    { header: 'Submitted at', width: 20 },
+                    { header: 'Status', width: 12 },
+                  ],
+                  rows: visible.map((f) => [
+                    f.type,
+                    f.title,
+                    f.period,
+                    data.names.get(f.submittedBy) ?? f.submittedBy,
+                    formatDateTime(f.submittedAt),
+                    f.status,
+                  ]),
+                  signatures: ['School head'],
+                  orientation: 'landscape' as const,
+                  footer: 'LC-DepEd • Approval register',
+                })}
+              />
             </>
           }
         >

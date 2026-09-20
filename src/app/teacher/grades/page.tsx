@@ -6,7 +6,8 @@ import { useLiveData } from '@/lib/store';
 import { getDb } from '@/lib/db';
 import { classRecord, saveGrade, sectionsForTeacher } from '@/lib/queries';
 import { WEIGHTS, WEIGHT_GROUP_LABELS, computeQuarter } from '@/lib/deped-grading';
-import { downloadCsv } from '@/lib/export';
+import { XlsxButton } from '@/components/export-buttons';
+import { workbook } from '@/lib/export';
 import { fullName } from '@/lib/format';
 import { Badge, Banner, Card, Loading, PageHeader } from '@/components/ui';
 import { Icon } from '@/components/icons';
@@ -64,16 +65,16 @@ export default function GradesPage() {
         title="Class record"
         description="Grades follow DepEd Order No. 8, s. 2015: percentage score × component weight → initial grade → transmuted quarterly grade."
         actions={
-          <button
-            type="button"
+          <XlsxButton
             className="btn btn-sm bg-deped-700 text-white"
+            label="Export class record"
             disabled={!data}
-            onClick={() => {
-              if (!data || !subject) return;
-              downloadCsv(
-                `ClassRecord-${subject.name}-Q${quarter}`,
-                ['LRN', 'Learner', 'WW PS', 'WW WS', 'PT PS', 'PT WS', 'QA PS', 'QA WS', 'Initial Grade', 'Quarterly Grade', 'Descriptor'],
-                data.rows.map((r) => [
+            build={() =>
+              workbook(
+                `ClassRecord-${subject?.name ?? 'subject'}-Q${quarter}`,
+                `Class record — ${subject?.name ?? ''} (Quarter ${quarter})`,
+                ['LRN', 'Learner', 'WW PS', 'WW WS', 'PT PS', 'PT WS', 'QA PS', 'QA WS', 'Initial grade', 'Quarterly grade', 'Descriptor'],
+                (data?.rows ?? []).map((r) => [
                   r.student.lrn,
                   fullName(r.student),
                   r.computed?.wwPs ?? '',
@@ -86,12 +87,28 @@ export default function GradesPage() {
                   r.computed?.quarterlyGrade ?? '',
                   r.computed?.descriptor ?? '',
                 ]),
-              );
-            }}
-          >
-            <Icon name="download" className="h-4 w-4" />
-            Export class record
-          </button>
+                {
+                  sheetName: `Q${quarter}`,
+                  subtitle: weights
+                    ? `Written Work ${weights.ww}% • Performance Tasks ${weights.pt}% • Quarterly Assessment ${weights.qa}%`
+                    : undefined,
+                  meta: [
+                    { label: 'Subject', value: subject?.name ?? '—' },
+                    { label: 'Quarter', value: String(quarter) },
+                    { label: 'Learners', value: String(data?.rows.length ?? 0) },
+                  ],
+                  notes: ['Grades computed under DepEd Order No. 8, s. 2015.'],
+                },
+              )
+            }
+            onResult={(outcome) =>
+              setNotice(
+                outcome === 'xlsx'
+                  ? 'Class record (.xlsx) downloaded.'
+                  : 'No connection — exported CSV from this device instead.',
+              )
+            }
+          />
         }
       />
 

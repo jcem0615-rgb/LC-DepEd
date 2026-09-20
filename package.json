@@ -2,7 +2,7 @@
   "name": "lc-deped",
   "version": "1.0.0",
   "private": true,
-  "description": "LC-DepEd \u2014 Offline-first DepEd School Management & Automation PWA",
+  "description": "LC-DepEd — Offline-first DepEd School Management & Automation PWA",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -13,14 +13,17 @@
   },
   "dependencies": {
     "dexie": "^4.0.11",
+    "exceljs": "^4.4.0",
     "html5-qrcode": "^2.3.8",
     "next": "^15.5.25",
+    "pdfkit": "^0.20.2",
     "qrcode": "^1.5.4",
     "react": "19.1.1",
     "react-dom": "19.1.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
+    "@types/pdfkit": "^0.17.6",
     "@types/qrcode": "^1.5.5",
     "@types/react": "^19.0.7",
     "@types/react-dom": "^19.0.3",

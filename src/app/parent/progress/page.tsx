@@ -6,11 +6,12 @@ import { useLiveData } from '@/lib/store';
 import { getDb } from '@/lib/db';
 import { attendanceSummary, childrenForUser, reportCard } from '@/lib/queries';
 import { logAudit } from '@/lib/audit';
-import { printSection } from '@/lib/export';
+import { PdfButton, XlsxButton } from '@/components/export-buttons';
+import { formPdfSpec, formWorkbookSpec, sf9Context } from '@/lib/form-specs';
 import { fullName } from '@/lib/format';
+import type { Section, Student, Tenant } from '@/lib/types';
 import { Card, EmptyState, Loading, PageHeader } from '@/components/ui';
 import { FormHeader, SF9Card } from '@/components/school-forms';
-import { Icon } from '@/components/icons';
 
 export default function ParentProgressPage() {
   const { session, t } = useSession();
@@ -66,10 +67,12 @@ export default function ParentProgressPage() {
         title={t('report_card')}
         description="The same SF9 your child's adviser signs — viewable offline once opened."
         actions={
-          <button type="button" className="btn btn-sm btn-secondary" onClick={() => printSection('parent-sf9')}>
-            <Icon name="document" className="h-4 w-4" />
-            {t('print')}
-          </button>
+          data && (
+            <>
+              <PdfButton build={() => formPdfSpec(reportContext(data))} fallbackElementId="parent-sf9" />
+              <XlsxButton build={() => formWorkbookSpec(reportContext(data))} />
+            </>
+          )
         }
       />
 
@@ -100,3 +103,20 @@ export default function ParentProgressPage() {
     </>
   );
 }
+
+type ProgressData = {
+  student: Student;
+  card: Awaited<ReturnType<typeof reportCard>>;
+  attendance: Awaited<ReturnType<typeof attendanceSummary>>[number] | null;
+  section: Section | null;
+  tenant: Tenant | null;
+};
+
+const reportContext = (data: ProgressData) =>
+  sf9Context({
+    student: data.student,
+    card: data.card,
+    attendance: data.attendance,
+    section: data.section,
+    tenant: data.tenant,
+  });

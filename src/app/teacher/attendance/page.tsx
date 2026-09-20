@@ -12,7 +12,9 @@ import {
   setAttendance,
   submitForm,
 } from '@/lib/queries';
-import { downloadCsv } from '@/lib/export';
+import { XlsxButton } from '@/components/export-buttons';
+import { formWorkbookSpec } from '@/lib/form-specs';
+import { getDb } from '@/lib/db';
 import { fullName, lastSchoolDay, todayIso } from '@/lib/format';
 import { Badge, Banner, Card, EmptyState, Loading, PageHeader, Tabs } from '@/components/ui';
 import { Icon } from '@/components/icons';
@@ -98,31 +100,31 @@ export default function AttendancePage() {
               <Icon name="check" className="h-4 w-4" />
               Mark all present
             </button>
-            <button
-              type="button"
+            <XlsxButton
               className="btn btn-sm bg-deped-700 text-white"
+              label="Export SF2 (XLSX)"
               disabled={!data}
-              onClick={() => {
-                if (!data || !section) return;
-                downloadCsv(
-                  `SF2-${section.name.replace(/\s+/g, '-')}-${date.slice(0, 7)}`,
-                  ['LRN', 'Name', 'Sex', 'Days present', 'Days absent', 'Late', 'Excused', 'Attendance %'],
-                  data.summary.map((row) => [
-                    row.student.lrn,
-                    fullName(row.student),
-                    row.student.sex,
-                    row.present,
-                    row.absent,
-                    row.late,
-                    row.excused,
-                    row.rate.toFixed(1),
-                  ]),
-                );
+              build={async () => {
+                const tenant = session?.tenantId
+                  ? ((await getDb().tenants.get(session.tenantId)) ?? null)
+                  : null;
+                return formWorkbookSpec({
+                  formType: 'SF2',
+                  tenant,
+                  section: section ?? null,
+                  roster: data?.roster ?? [],
+                  summary: data?.summary ?? [],
+                  period: date.slice(0, 7),
+                });
               }}
-            >
-              <Icon name="download" className="h-4 w-4" />
-              Export SF2 (CSV)
-            </button>
+              onResult={(outcome) =>
+                setNotice(
+                  outcome === 'xlsx'
+                    ? 'SF2 workbook (.xlsx) downloaded.'
+                    : 'No connection — exported CSV from this device instead.',
+                )
+              }
+            />
           </>
         }
       />
