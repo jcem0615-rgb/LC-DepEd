@@ -1,0 +1,33 @@
+{
+  "name": "lc-deped",
+  "version": "1.0.0",
+  "private": true,
+  "description": "LC-DepEd \u2014 Offline-first DepEd School Management & Automation PWA",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "icons": "node scripts/generate-icons.mjs",
+    "test": "tsc -p tsconfig.test.json && node --test \".test-build/tests/*.test.js\""
+  },
+  "dependencies": {
+    "dexie": "^4.0.11",
+    "html5-qrcode": "^2.3.8",
+    "next": "^15.5.25",
+    "qrcode": "^1.5.4",
+    "react": "19.1.1",
+    "react-dom": "19.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/qrcode": "^1.5.5",
+    "@types/react": "^19.0.7",
+    "@types/react-dom": "^19.0.3",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "sharp": "^0.33.5",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.3"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "target": "ES2022",
+    "noEmit": false,
+    "incremental": false,
+    "outDir": ".test-build",
+    "rootDir": ".",
+    "types": ["node"]
+  },
+  "include": [
+    "src/lib/types.ts",
+    "src/lib/deped-grading.ts",
+    "src/lib/crypto.ts",
+    "src/lib/eid.ts",
+    "src/lib/format.ts",
+    "tests/**/*.ts"
+  ]
+}

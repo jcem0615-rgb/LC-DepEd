@@ -1,0 +1,106 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+body {
+  @apply bg-slate-100 text-ink antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Thumb-friendly defaults for field use on low-end Android phones. */
+@layer components {
+  .btn {
+    @apply inline-flex min-h-touch items-center justify-center gap-2 rounded-xl px-4 py-3 text-base font-semibold transition
+      focus:outline-none focus-visible:ring-4 focus-visible:ring-deped-300 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn bg-deped-700 text-white hover:bg-deped-800 active:bg-deped-900;
+  }
+  .btn-secondary {
+    @apply btn border-2 border-slate-300 bg-white text-slate-800 hover:bg-slate-50;
+  }
+  .btn-ghost {
+    @apply btn text-slate-700 hover:bg-slate-200;
+  }
+  .btn-danger {
+    @apply btn bg-rose-600 text-white hover:bg-rose-700;
+  }
+  .btn-sm {
+    @apply min-h-0 rounded-lg px-3 py-2 text-sm;
+  }
+  .card {
+    @apply rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5;
+  }
+  .input {
+    @apply min-h-touch w-full rounded-xl border-2 border-slate-300 bg-white px-4 py-3 text-base
+      placeholder:text-slate-400 focus:border-deped-600 focus:outline-none focus:ring-4 focus:ring-deped-100;
+  }
+  .label {
+    @apply mb-1 block text-sm font-semibold text-slate-700;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold;
+  }
+  .table-wrap {
+    @apply -mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0;
+  }
+  .data-table {
+    @apply w-full min-w-[36rem] border-collapse text-left text-sm;
+  }
+  .data-table th {
+    @apply whitespace-nowrap border-b-2 border-slate-200 px-3 py-2 text-xs font-bold uppercase tracking-wide text-slate-500;
+  }
+  .data-table td {
+    @apply border-b border-slate-100 px-3 py-2 align-middle;
+  }
+  .skeleton {
+    @apply animate-pulse rounded-lg bg-slate-200;
+  }
+}
+
+/* Print: only the targeted form is sent to the printer / PDF writer. */
+@media print {
+  body.printing * {
+    visibility: hidden !important;
+  }
+  body.printing .print-target,
+  body.printing .print-target * {
+    visibility: visible !important;
+  }
+  body.printing .print-target {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 0;
+    margin: 0;
+    box-shadow: none;
+    border: none;
+  }
+  .no-print {
+    display: none !important;
+  }
+  @page {
+    margin: 12mm;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}

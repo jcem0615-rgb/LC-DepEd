@@ -1,0 +1,27 @@
+{
+  "name": "LC-DepEd — School Management & Automation",
+  "short_name": "LC-DepEd",
+  "description": "Offline-first DepEd school management PWA: attendance, grades, school forms, dynamic student e-ID and free Web Push gate alerts.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0f172a",
+  "theme_color": "#1743e1",
+  "lang": "en-PH",
+  "dir": "ltr",
+  "categories": ["education", "productivity"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/badge-72.png", "sizes": "72x72", "type": "image/png", "purpose": "monochrome" }
+  ],
+  "shortcuts": [
+    { "name": "Take attendance", "short_name": "Attendance", "url": "/teacher/attendance", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "My e-ID", "short_name": "e-ID", "url": "/student/eid", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Gate scanner", "short_name": "Scanner", "url": "/scanner", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}
