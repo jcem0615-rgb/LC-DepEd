@@ -1,5 +1,7 @@
 # LC-DepEd — DepEd School Management & Automation PWA
 
+**Live demo: https://lc-deped.vercel.app** — sign in with any account in the table below.
+
 An offline-first Progressive Web App for Philippine public schools: attendance,
 DepEd Order No. 8 s. 2015 grading, School Forms automation (SF1–SF10), a dynamic
 student e-ID for gate security, and free Web Push alerts for guardians instead of
@@ -56,6 +58,22 @@ messaging flows that need two teachers.
 8. Sign in as the **parent** → **Gate Alerts** to see the notification land.
 
 ---
+
+## Deployment
+
+The demo runs on Vercel (project `lc-deped`). Because the XLSX and PDF exports are
+route handlers, the app needs a Node runtime — everything else prerenders as
+static HTML.
+
+Two deployment details matter:
+
+- `serverExternalPackages` keeps ExcelJS and PDFKit out of the bundler, and
+  `outputFileTracingIncludes` copies PDFKit's `.afm` font metrics into the PDF
+  route. Without the second one the traced bundle carries 0 of the 14 metric
+  files and the PDF endpoint throws `ENOENT` in production while working fine
+  locally against a full `node_modules`.
+- Both export routes declare `maxDuration = 30`, since a full-division roster can
+  outrun the platform's 10-second default.
 
 ## Running it
 
