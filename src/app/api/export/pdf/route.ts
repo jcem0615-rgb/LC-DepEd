@@ -17,6 +17,9 @@ import {
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+// A full-division roster can take a few seconds to render; the platform default
+// of 10s is tight for the largest exports.
+export const maxDuration = 30;
 
 const MAX_BODY_BYTES = 4_000_000;
 
