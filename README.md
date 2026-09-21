@@ -61,9 +61,10 @@ messaging flows that need two teachers.
 
 ## Deployment
 
-The demo runs on Vercel (project `lc-deped`). Because the XLSX and PDF exports are
-route handlers, the app needs a Node runtime — everything else prerenders as
-static HTML.
+The demo runs on Vercel (project `lc-deped`), connected to this repository: every
+push to `claude/affectionate-einstein-kfudx6` builds and promotes to production
+automatically. Because the XLSX and PDF exports are route handlers, the app needs
+a Node runtime — everything else prerenders as static HTML.
 
 Two deployment details matter:
 
