@@ -83,7 +83,6 @@ export default function ScannerPage() {
           malformed: 'That code is not an LC-DepEd e-ID.',
           unknown_learner: 'No learner in this school matches that LRN.',
           bad_signature: 'Signature check failed — the code may be forged.',
-          expired: 'This code has expired. Ask the learner to refresh their e-ID.',
         };
         chime(false);
         setOutcome({
@@ -107,10 +106,10 @@ export default function ScannerPage() {
 
       const student = await studentByLrn(result.lrn);
       if (!student) return;
-      await recordGateEvent({ student, direction, method: result.mode });
+      await recordGateEvent({ student, direction, method: 'qr' });
       void showNotification(
         `${student.firstName} ${direction === 'in' ? 'entered' : 'left'} the school`,
-        `Main Gate • verified ${result.mode} e-ID`,
+        'Main Gate • verified e-ID',
         `gate-${student.id}`,
       );
       if (session) {
@@ -307,7 +306,7 @@ export default function ScannerPage() {
                   className="input"
                   value={manual}
                   onChange={(e) => setManual(e.target.value)}
-                  placeholder="LCD1|dynamic|… or 136001200001"
+                  placeholder="LCD1|136001200001|… or 136001200001"
                 />
                 <button type="submit" className="btn-primary">Record</button>
               </form>
@@ -343,8 +342,9 @@ export default function ScannerPage() {
 
         <div className="mt-4 text-sm">
           <Banner tone="info">
-            Scans are verified offline against the learner&apos;s HMAC secret; guardians receive a free
-            Web Push notification the moment a scan is recorded.
+            Each learner carries one permanent code. Scans are verified offline against the
+            learner&apos;s HMAC secret; guardians receive a free Web Push notification the moment a
+            scan is recorded.
           </Banner>
         </div>
       </div>

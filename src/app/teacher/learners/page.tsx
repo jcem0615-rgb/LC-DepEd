@@ -10,7 +10,12 @@ import {
   reportCard,
   rosterForSection,
   sectionsForTeacher,
+  setLearnerPhoto,
 } from '@/lib/queries';
+import { PhotoCapture } from '@/components/photo-capture';
+import { buildEid } from '@/lib/eid';
+import { learnerPortraitSvg } from '@/lib/learner-photo';
+import { QrCode } from '@/components/qr-code';
 import { formatDate, formatDateTime, fullName, maskLrn } from '@/lib/format';
 import { Badge, Card, EmptyState, Loading, PageHeader, Toggle } from '@/components/ui';
 import type { Student } from '@/lib/types';
@@ -39,15 +44,17 @@ export default function LearnersPage() {
 
   const { data: detail } = useLiveData(async () => {
     if (!selected) return null;
-    const [card, attendance, gates] = await Promise.all([
+    const [card, attendance, gates, eid] = await Promise.all([
       reportCard(selected.id),
       attendanceSummary(selected.sectionId),
       gateEventsForStudent(selected.id, 6),
+      buildEid(selected.lrn, selected.qrSecret).catch(() => ''),
     ]);
     return {
       card,
       attendance: attendance.find((a) => a.student.id === selected.id) ?? null,
       gates,
+      eid,
     };
   }, [selected?.id]);
 
@@ -122,10 +129,14 @@ export default function LearnersPage() {
                       selected?.id === student.id ? 'bg-deped-50' : 'hover:bg-slate-50'
                     }`}
                   >
-                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-deped-100 text-sm font-bold text-deped-800">
-                      {student.firstName[0]}
-                      {student.lastName[0]}
-                    </span>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={learnerPortraitSvg(student)}
+                      alt=""
+                      width={36}
+                      height={45}
+                      className="h-11 w-9 shrink-0 rounded-md object-cover ring-1 ring-slate-200"
+                    />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate font-semibold text-ink">{fullName(student)}</span>
                       <span className="block font-mono text-xs text-slate-500">
@@ -147,6 +158,49 @@ export default function LearnersPage() {
             <Loading rows={4} />
           ) : (
             <div className="space-y-4 text-sm">
+              <div className="flex flex-wrap items-center gap-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={learnerPortraitSvg(selected)}
+                  alt={`Portrait of ${fullName(selected)}`}
+                  width={104}
+                  height={130}
+                  className="rounded-lg border-4 border-white shadow ring-1 ring-slate-200"
+                />
+                <div className="min-w-0">
+                  <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                    Learner e-ID
+                  </p>
+                  <p className="mt-0.5 font-bold text-ink">{fullName(selected)}</p>
+                  <p className="font-mono text-xs text-slate-500">
+                    {revealPii ? selected.lrn : maskLrn(selected.lrn)}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Grade {selected.gradeLevel} • permanent code
+                  </p>
+                </div>
+                {detail.eid ? (
+                  <QrCode value={detail.eid} size={104} alt={`e-ID QR code for ${fullName(selected)}`} className="ml-auto" />
+                ) : (
+                  <div className="skeleton ml-auto h-[104px] w-[104px]" />
+                )}
+              </div>
+
+              <PhotoCapture
+                label="ID photo"
+                currentPhoto={selected.photoUrl}
+                onSave={async (dataUrl) => {
+                  if (!session) return;
+                  await setLearnerPhoto(session, selected, dataUrl);
+                  setSelected({ ...selected, photoUrl: dataUrl });
+                }}
+                onRemove={async () => {
+                  if (!session) return;
+                  await setLearnerPhoto(session, selected, null);
+                  setSelected({ ...selected, photoUrl: undefined });
+                }}
+              />
+
               <div className="grid gap-1 sm:grid-cols-2">
                 <p><span className="text-slate-500">LRN: </span><b className="font-mono">{revealPii ? selected.lrn : maskLrn(selected.lrn)}</b></p>
                 <p><span className="text-slate-500">Sex: </span><b>{selected.sex === 'M' ? 'Male' : 'Female'}</b></p>

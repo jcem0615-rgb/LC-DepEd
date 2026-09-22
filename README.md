@@ -11,8 +11,8 @@ Six role-based portals ship in one installable app:
 
 | Portal | What it does |
 | --- | --- |
-| **Teacher** | One-tap attendance, DO 8 s. 2015 class record, SF1/SF2/SF5/SF9/SF10 generation as real .xlsx and PDF, MATATAG Daily Lesson Log builder with voice input, IPCRF/RPMS portfolio |
-| **Learner** | Grades and attendance, dynamic HMAC-signed e-ID QR, printable PDF ID card, offline Self-Learning Kits |
+| **Teacher** | One-tap attendance, DO 8 s. 2015 class record, SF1/SF2/SF5/SF9/SF10 generation as real .xlsx and PDF, MATATAG Daily Lesson Log builder with voice input, IPCRF/RPMS portfolio, learner e-ID with ID photo capture |
+| **Learner** | Grades and attendance, signed e-ID QR with photo, printable PDF ID card, offline Self-Learning Kits |
 | **Parent / Guardian** | Real-time gate push alerts, signed SF9 report card, adviser messaging, 1-tap dialect switch |
 | **School Head** | Approval hub with batch digital signing, NTP task routing (DO 2, s. 2024), LIS sync, school audit trail |
 | **SDO / Regional Office** | Automated report intake with rule validation, division analytics, dropout-risk watchlist, security console |
@@ -50,7 +50,9 @@ messaging flows that need two teachers.
 3. Go to **School Forms**, flip through SF1/SF2/SF5/SF9/SF10, then
    **Submit for approval**.
 4. Sign in as the **school head** → **Approval hub** → select all → **Batch sign**.
-5. Sign in as the **learner** → **My e-ID**. The QR rotates every 30 seconds.
+5. Sign in as the **learner** → **My e-ID** to see the ID card: learner photo, permanent
+   QR, and a PDF of the printed card. Set a real photo with **Take a photo** (opens the
+   device camera) or **Upload photo** — teachers can do the same from **Learners**.
 6. Back in **School Forms**, hit **Export XLSX** and **Download PDF** on any form —
    both are generated server-side and open in Excel and any PDF reader.
 7. Open `/scanner` as the teacher or school head, paste that e-ID payload into

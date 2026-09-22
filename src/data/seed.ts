@@ -144,7 +144,7 @@ const LAST = ['Dela Cruz', 'Aquino', 'Lopez', 'Fernandez', 'Castillo', 'Navarro'
 const BARANGAY = ['Brgy. Greater Lagro', 'Brgy. North Fairview', 'Brgy. Novaliches', 'Brgy. San Bartolome', 'Brgy. Kaligayahan'];
 const TONGUE = ['Tagalog', 'Ilokano', 'Cebuano', 'Bikol'];
 
-/** Demo e-ID seed derived from the LRN — stable and clearly non-production. */
+/** Demo e-ID secret derived from the LRN — stable and clearly non-production. */
 export const eidSecretFor = (lrn: string) => `demo-eid-seed::${lrn}::LC-DepEd`;
 
 function buildStudents(): Student[] {
@@ -312,7 +312,7 @@ export const DEMO_ACCOUNTS: DemoAccount[] = [
     email: 'student@lcdeped.ph',
     password: DEMO_PASSWORD,
     name: 'Althea Dela Cruz',
-    blurb: `Grades, attendance, dynamic e-ID QR, offline SLKs. LRN login: ${DEMO_STUDENT.lrn}`,
+    blurb: `Grades, attendance, e-ID QR with photo, offline SLKs. LRN login: ${DEMO_STUDENT.lrn}`,
   },
   {
     role: 'parent',
@@ -509,7 +509,7 @@ export function buildGateEvents(): GateEvent[] {
         direction: 'in',
         timestamp: Date.parse(`${day}T00:05:00Z`) + int(0, 1800) * 1000,
         verified: true,
-        method: 'dynamic',
+        method: 'qr',
         tenantId: HOME_TENANT,
         gate: 'Main Gate',
       });
@@ -520,7 +520,7 @@ export function buildGateEvents(): GateEvent[] {
         direction: 'out',
         timestamp: Date.parse(`${day}T08:00:00Z`) + int(0, 2400) * 1000,
         verified: true,
-        method: 'dynamic',
+        method: 'qr',
         tenantId: HOME_TENANT,
         gate: 'Main Gate',
       });
@@ -532,8 +532,8 @@ export function buildGateEvents(): GateEvent[] {
 export function buildAlerts(): AlertItem[] {
   const now = Date.now();
   return [
-    { id: 'alr-1', recipientId: 'usr-parent', title: 'Althea entered the school', body: 'Main Gate • verified dynamic e-ID', timestamp: now - 5 * 3600_000, read: false, kind: 'gate' },
-    { id: 'alr-2', recipientId: 'usr-parent', title: 'Althea left the school', body: 'Main Gate • verified dynamic e-ID', timestamp: now - 1 * 3600_000, read: false, kind: 'gate' },
+    { id: 'alr-1', recipientId: 'usr-parent', title: 'Althea entered the school', body: 'Main Gate • verified e-ID', timestamp: now - 5 * 3600_000, read: false, kind: 'gate' },
+    { id: 'alr-2', recipientId: 'usr-parent', title: 'Althea left the school', body: 'Main Gate • verified e-ID', timestamp: now - 1 * 3600_000, read: false, kind: 'gate' },
     { id: 'alr-3', recipientId: 'usr-parent', title: 'Quarter 1 report card is ready', body: 'SF9 signed by the class adviser.', timestamp: now - 2 * 86_400_000, read: true, kind: 'grade' },
     { id: 'alr-4', recipientId: 'usr-teacher', title: 'SF5 returned by the School Head', body: 'Two learners lack Q2 MAPEH grades.', timestamp: now - 6 * 86_400_000, read: false, kind: 'form' },
     { id: 'alr-5', recipientId: 'usr-head', title: '3 forms awaiting your signature', body: 'SF2, SF9 and SF10 submissions are queued.', timestamp: now - 3600_000, read: false, kind: 'form' },
@@ -567,7 +567,7 @@ export function buildAuditLogs(): AuditLog[] {
 }
 
 export const featureFlags: FeatureFlag[] = [
-  { key: 'dynamic_eid', label: 'Dynamic e-ID (TOTP)', enabled: true, description: 'Rotating QR every 30s; disable to fall back to printed static IDs.', rollout: 100 },
+  { key: 'learner_eid', label: 'Learner e-ID QR', enabled: true, description: 'One permanent signed QR per learner, printed on the ID card and shown in the portal.', rollout: 100 },
   { key: 'web_push', label: 'Web Push gate alerts', enabled: true, description: 'VAPID push notifications to parents, replacing paid SMS.', rollout: 100 },
   { key: 'matatag_dll', label: 'MATATAG DLL competencies', enabled: true, description: 'Serve MATATAG curriculum codes in the Daily Lesson Log builder.', rollout: 80 },
   { key: 'lis_autosync', label: 'LIS auto-sync', enabled: false, description: 'Nightly enrollment push to the DepEd Learner Information System.', rollout: 25 },

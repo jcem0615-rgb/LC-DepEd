@@ -59,7 +59,9 @@ export interface Student {
   motherTongue: string;
   ipCommunity: string;
   fourPs: boolean;
-  qrSecret: string; // HMAC seed for the dynamic e-ID
+  /** Uploaded ID photo. Without one the portal renders a generated portrait. */
+  photoUrl?: string;
+  qrSecret: string; // HMAC seed for the e-ID signature
   enrolledAt: number;
 }
 
@@ -167,6 +169,8 @@ export interface FormSubmission {
 
 export type GateDirection = 'in' | 'out';
 
+export type GateMethod = 'qr' | 'manual';
+
 export interface GateEvent {
   id: string;
   studentId: string;
@@ -174,7 +178,7 @@ export interface GateEvent {
   direction: GateDirection;
   timestamp: number;
   verified: boolean;
-  method: 'dynamic' | 'static' | 'manual';
+  method: GateMethod;
   tenantId: string;
   gate: string;
 }

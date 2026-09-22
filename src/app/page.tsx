@@ -8,7 +8,7 @@ const FEATURES = [
   },
   {
     title: 'Zero-SMS gate alerts',
-    body: 'A dynamic HMAC-SHA256 e-ID that rotates every 30 seconds is scanned at the gate; guardians get a free Web Push notification instead of a paid SMS blast.',
+    body: 'Each learner carries one signed HMAC-SHA256 e-ID with their photo. It is scanned at the gate and guardians get a free Web Push notification instead of a paid SMS blast.',
   },
   {
     title: 'Paperwork automation',

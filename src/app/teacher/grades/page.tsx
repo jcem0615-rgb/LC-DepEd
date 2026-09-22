@@ -9,7 +9,7 @@ import { WEIGHTS, WEIGHT_GROUP_LABELS, computeQuarter } from '@/lib/deped-gradin
 import { XlsxButton } from '@/components/export-buttons';
 import { workbook } from '@/lib/export';
 import { fullName } from '@/lib/format';
-import { Badge, Banner, Card, Loading, PageHeader } from '@/components/ui';
+import { Badge, Banner, Card, Loading, Modal, PageHeader } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import type { GradeRecord, Student } from '@/lib/types';
 
@@ -220,14 +220,39 @@ export default function GradesPage() {
       )}
 
       {editor && subject && (
-        <Card
-          className="mt-4 border-2 border-deped-300"
+        <Modal
           title={`Encode scores — ${fullName(editor.student)}`}
           subtitle={`${subject.name} • Quarter ${quarter}`}
-          action={
-            <button type="button" className="btn btn-sm btn-ghost" onClick={() => setEditor(null)}>
-              Close
-            </button>
+          onClose={() => setEditor(null)}
+          footer={
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="btn-primary flex-1"
+                onClick={async () => {
+                  if (!session) return;
+                  await saveGrade(session, editor.record, {
+                    studentId: editor.student.id,
+                    subjectId: subject.id,
+                    quarter,
+                    writtenWork: nums(editor.ww),
+                    writtenWorkTotals: nums(editor.wwT),
+                    performanceTasks: nums(editor.pt),
+                    performanceTaskTotals: nums(editor.ptT),
+                    quarterlyAssessment: Number(editor.qa) || 0,
+                    quarterlyAssessmentTotal: Number(editor.qaT) || 0,
+                  });
+                  setNotice(`Saved locally ✓ — ${fullName(editor.student)} (Q${quarter} ${subject.name})`);
+                  setEditor(null);
+                }}
+              >
+                <Icon name="check" className="h-5 w-5" />
+                Save locally
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => setEditor(null)}>
+                Cancel
+              </button>
+            </div>
           }
         >
           <ScoreGroup
@@ -266,36 +291,7 @@ export default function GradesPage() {
           </fieldset>
 
           <LivePreview editor={editor} weightGroup={subject.weightGroup} />
-
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={async () => {
-                if (!session) return;
-                await saveGrade(session, editor.record, {
-                  studentId: editor.student.id,
-                  subjectId: subject.id,
-                  quarter,
-                  writtenWork: nums(editor.ww),
-                  writtenWorkTotals: nums(editor.wwT),
-                  performanceTasks: nums(editor.pt),
-                  performanceTaskTotals: nums(editor.ptT),
-                  quarterlyAssessment: Number(editor.qa) || 0,
-                  quarterlyAssessmentTotal: Number(editor.qaT) || 0,
-                });
-                setNotice(`Saved locally ✓ — ${fullName(editor.student)} (Q${quarter} ${subject.name})`);
-                setEditor(null);
-              }}
-            >
-              <Icon name="check" className="h-5 w-5" />
-              Save locally
-            </button>
-            <button type="button" className="btn-secondary" onClick={() => setEditor(null)}>
-              Cancel
-            </button>
-          </div>
-        </Card>
+        </Modal>
       )}
     </>
   );

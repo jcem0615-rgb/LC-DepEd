@@ -75,16 +75,28 @@ test('limits bound every dimension', () => {
 test('pdf image payloads are restricted to inline PNG/JPEG', () => {
   const base = { filename: 'card', title: 'e-ID', columns: [], rows: [], tableOptional: true };
   const png = 'data:image/png;base64,iVBORw0KGgo=';
-  assert.equal(validatePdfSpec({ ...base, image: { dataUrl: png, width: 190 } }), null);
+  assert.equal(validatePdfSpec({ ...base, images: [{ dataUrl: png, width: 190 }] }), null);
+  // A portrait alongside the QR is the ID-card case.
+  assert.equal(
+    validatePdfSpec({ ...base, images: [{ dataUrl: png, width: 130 }, { dataUrl: png, width: 170 }] }),
+    null,
+  );
 
-  assert.ok(validatePdfSpec({ ...base, image: { dataUrl: 'https://example.com/qr.png' } }));
-  assert.ok(validatePdfSpec({ ...base, image: { dataUrl: 'data:image/svg+xml;base64,PHN2Zz4=' } }));
-  assert.ok(validatePdfSpec({ ...base, image: { dataUrl: png, width: 9000 } }));
+  assert.ok(validatePdfSpec({ ...base, images: [{ dataUrl: 'https://example.com/qr.png' }] }));
+  assert.ok(validatePdfSpec({ ...base, images: [{ dataUrl: 'data:image/svg+xml;base64,PHN2Zz4=' }] }));
+  assert.ok(validatePdfSpec({ ...base, images: [{ dataUrl: png, width: 9000 }] }));
   assert.ok(
     validatePdfSpec({
       ...base,
-      image: { dataUrl: `data:image/png;base64,${'A'.repeat(EXPORT_LIMITS.imageBytes)}` },
+      images: [{ dataUrl: `data:image/png;base64,${'A'.repeat(EXPORT_LIMITS.imageBytes)}` }],
     }),
+  );
+  assert.ok(
+    validatePdfSpec({
+      ...base,
+      images: Array.from({ length: EXPORT_LIMITS.images + 1 }, () => ({ dataUrl: png })),
+    }),
+    'too many images are rejected',
   );
 });
 
@@ -97,7 +109,7 @@ test('a table is still required when the document is not an image card', () => {
       columns: [],
       rows: [],
       tableOptional: true,
-      image: { dataUrl: 'data:image/png;base64,iVBORw0KGgo=' },
+      images: [{ dataUrl: 'data:image/png;base64,iVBORw0KGgo=' }],
     }),
     null,
   );

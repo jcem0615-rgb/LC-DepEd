@@ -138,16 +138,33 @@ function draw(doc: Doc, spec: PdfSpec) {
     doc.moveDown(0.6);
   }
 
-  // ---- Optional image (e.g. a learner's QR e-ID) --------------------
-  if (spec.image) {
-    const base64 = spec.image.dataUrl.slice(spec.image.dataUrl.indexOf(',') + 1);
-    const buffer = Buffer.from(base64, 'base64');
-    const width = Math.min(spec.image.width ?? 180, usable);
-    const x = left + (usable - width) / 2;
-    doc.image(buffer, x, doc.y, { width });
-    doc.y += width + 6;
-    if (spec.image.caption) {
-      doc.font('Helvetica').fontSize(8).fillColor(MUTED).text(spec.image.caption, left, doc.y, {
+  // ---- Optional images (learner portrait, QR e-ID) ------------------
+  if (spec.images?.length) {
+    const rendered = spec.images.map((image) => ({
+      buffer: Buffer.from(image.dataUrl.slice(image.dataUrl.indexOf(',') + 1), 'base64'),
+      width: Math.min(image.width ?? 170, usable),
+      caption: image.caption,
+    }));
+    const gap = rendered.length > 1 ? 24 : 0;
+    const totalWidth = rendered.reduce((sum, r) => sum + r.width, 0) + gap * (rendered.length - 1);
+    const scale = totalWidth > usable ? usable / totalWidth : 1;
+
+    const top = doc.y;
+    let x = left + (usable - totalWidth * scale) / 2;
+    let tallest = 0;
+    for (const item of rendered) {
+      const width = item.width * scale;
+      doc.image(item.buffer, x, top, { width });
+      // PDFKit advances doc.y to the bottom of the image it just drew.
+      tallest = Math.max(tallest, doc.y - top);
+      doc.y = top;
+      x += width + gap * scale;
+    }
+    doc.y = top + tallest + 8;
+
+    const caption = spec.imageCaption ?? rendered.find((r) => r.caption)?.caption;
+    if (caption) {
+      doc.font('Helvetica').fontSize(8).fillColor(MUTED).text(caption, left, doc.y, {
         width: usable,
         align: 'center',
       });

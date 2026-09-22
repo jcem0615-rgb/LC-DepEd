@@ -1,6 +1,6 @@
 'use client';
 
-import { type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 
 export type Tone = 'neutral' | 'success' | 'warning' | 'danger' | 'info' | 'brand';
 
@@ -233,6 +233,81 @@ export function Banner({ tone = 'info', children }: { tone?: Tone; children: Rea
   return (
     <div className={`rounded-xl border-2 px-4 py-3 text-sm ${styles[tone]}`} role="status">
       {children}
+    </div>
+  );
+}
+
+/**
+ * Centred modal. Used where a panel must be seen the moment it opens — a long
+ * roster used to push the grade editor far below the fold, so opening it looked
+ * like nothing had happened.
+ */
+export function Modal({
+  title,
+  subtitle,
+  onClose,
+  children,
+  footer,
+}: {
+  title: ReactNode;
+  subtitle?: ReactNode;
+  onClose: () => void;
+  children: ReactNode;
+  footer?: ReactNode;
+}) {
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    // Move focus into the panel — to the first field, not the Close button.
+    const panel = panelRef.current;
+    const field = panel?.querySelector<HTMLElement>('input, select, textarea');
+    (field ?? panel?.querySelector<HTMLElement>('button'))?.focus();
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
+      <button
+        type="button"
+        aria-label="Close"
+        className="absolute inset-0 bg-slate-900/50 backdrop-blur-[2px]"
+        onClick={onClose}
+      />
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={typeof title === 'string' ? title : undefined}
+        className="relative z-10 flex max-h-[92vh] w-full flex-col rounded-t-2xl bg-white shadow-2xl sm:max-w-2xl sm:rounded-2xl"
+      >
+        <header className="flex items-start justify-between gap-3 border-b border-slate-200 p-4">
+          <div>
+            <h2 className="text-lg font-bold text-ink">{title}</h2>
+            {subtitle && <p className="mt-0.5 text-sm text-slate-500">{subtitle}</p>}
+          </div>
+          <button type="button" className="btn btn-sm btn-ghost" onClick={onClose}>
+            Close
+          </button>
+        </header>
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">{children}</div>
+        {footer && (
+          <footer
+            className="border-t border-slate-200 p-4"
+            style={{ paddingBottom: 'calc(1rem + var(--safe-bottom))' }}
+          >
+            {footer}
+          </footer>
+        )}
+      </div>
     </div>
   );
 }

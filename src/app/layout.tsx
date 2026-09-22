@@ -8,7 +8,7 @@ export const metadata: Metadata = {
     template: '%s · LC-DepEd',
   },
   description:
-    'Offline-first DepEd school management PWA: attendance, DO 8 s.2015 grading, School Forms automation, dynamic student e-ID and free Web Push gate alerts.',
+    'Offline-first DepEd school management PWA: attendance, DO 8 s.2015 grading, School Forms automation, signed student e-ID and free Web Push gate alerts.',
   manifest: '/manifest.webmanifest',
   applicationName: 'LC-DepEd',
   appleWebApp: {

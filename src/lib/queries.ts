@@ -510,3 +510,23 @@ export async function studentByLrn(lrn: string): Promise<Student | null> {
   const row = await getDb().students.where('lrn').equals(lrn).first();
   return row ?? null;
 }
+
+/** Sets or clears a learner's ID photo. Photos are PII, so every change is audited. */
+export async function setLearnerPhoto(
+  session: Session,
+  student: Student,
+  photoUrl: string | null,
+): Promise<void> {
+  const db = getDb();
+  await db.students.update(student.id, { photoUrl: photoUrl ?? undefined });
+  await enqueue('students', 'update', student.id, { id: student.id, photoUrl });
+  await logAudit({
+    actorId: session.userId,
+    actorRole: session.role,
+    action: photoUrl ? 'LEARNER_PHOTO_SET' : 'LEARNER_PHOTO_REMOVE',
+    target: student.id,
+    tenantId: session.tenantId,
+    piiAccessed: true,
+  });
+  notifyChange();
+}

@@ -123,39 +123,57 @@ access / Compliance / Permission matrix.
 **PDF specifics.** A4, portrait or landscape chosen by column count, DepEd header
 block, two-column meta grid, a table whose header repeats on every page, automatic
 pagination with `Page n of m` numbering, notes, and signature rules. The learner
-e-ID card embeds the QR as a PNG — and deliberately embeds the *static*
-signature, because a rotating 30-second code would be void before the ink dried.
+e-ID card embeds the learner portrait and the QR side by side as PNGs.
 
 ---
 
-## 3. Dynamic e-ID protocol
+## 3. Learner e-ID protocol
 
-Payload: `LCD1|<mode>|<lrn>|<counter>|<signature>`
+Payload: `LCD1|<lrn>|<signature>`
 
-- `mode` is `dynamic` (rotating) or `static` (printed card).
-- `counter` = `floor(unixSeconds / 30)` for dynamic codes, `0` for static.
 - `signature` = first 24 base64url characters of
-  `HMAC-SHA256(learnerSecret, "LCD1|<mode>|<lrn>|<counter>")`.
+  `HMAC-SHA256(learnerSecret, "LCD1|<lrn>")`.
+
+Each learner has exactly one code. It is derived from their LRN and a secret only
+the school holds, so it is unique per learner, stable forever, and identical on
+the printed card and on screen.
 
 Properties:
 
 - **No PII in the code.** Only the LRN and a signature — no name, address or
   contact number is ever encoded.
-- **Screenshots expire.** A dynamic code is valid for its 30-second window.
+- **Unforgeable without the secret.** Swapping the LRN inside someone else's
+  payload invalidates the signature, which `tests/eid.test.ts` pins directly.
 - **Offline verification.** The kiosk recomputes the HMAC from its own copy of the
-  learner secret, so gates work with no connectivity. A ±1 window (±30 s) drift is
-  accepted for kiosks with skewed clocks.
-- **Replay containment.** Rejections are logged with a reason
-  (`malformed`, `unknown_learner`, `bad_signature`, `expired`) and the scanner
-  debounces repeat frames of the same payload for 4 seconds.
-- **Printed IDs still work.** Static signatures never expire, for learners without
-  a phone; the `dynamic_eid` feature flag controls which modes a school issues.
+  learner secret, so gates work with no connectivity — and, because no clock is
+  involved, a kiosk with a wrong clock verifies just as well.
+- **Revocation.** A lost card is handled by re-issuing the learner secret: every
+  previous code stops verifying immediately.
+- **Rejections are logged** with a reason (`malformed`, `unknown_learner`,
+  `bad_signature`), and the scanner debounces repeat frames of the same payload
+  for 4 seconds.
 
 In production the learner secret stays server-side (`students.eid_secret_enc`,
 encrypted with pgcrypto) and is delivered to the learner's device and to gate
 kiosks over an authenticated channel.
 
----
+### Learner portrait
+
+The ID card carries the learner's photo. `Student.photoUrl` holds the photo;
+where none exists, `lib/learner-photo.ts` generates a stable portrait from a hash
+of the LRN, so the same learner shows the same picture on every device and no
+card is ever a blank frame. The portrait appears in the teacher's roster, in the
+learner detail alongside the e-ID QR, and — rendered to PNG through a canvas,
+since PDFKit takes no SVG — on the printed card.
+
+A photo is set from either side: the teacher sets it on the learner detail, and
+the learner sets their own on the e-ID screen. `components/photo-capture.tsx`
+offers both routes — **Upload photo**, and **Take a photo**, which opens the
+device camera through `getUserMedia` with a live preview and a shutter (the file
+input also carries `capture="user"`, so a phone offers its camera directly). Both
+routes centre-crop to the 4:5 ID ratio and downscale to 480px JPEG before
+storing, so a 12-megapixel phone photo does not land in IndexedDB. Photos are
+personal data, so setting or removing one writes an audit entry.
 
 ## 4. Security, RBAC and RA 10173
 
@@ -190,9 +208,10 @@ drives the anonymisation job; audit entries are retained independently.
 
 ## 5. Testing
 
-- `npm test` — 25 unit tests over the transmutation table, component weighting,
+- `npm test` — 26 unit tests over the transmutation table, component weighting,
   promotion/honours rules, e-ID signing, drift tolerance, tampering, expiry and
-  static-card behaviour, plus the export contract (filename and sheet-name
+  per-learner uniqueness, LRN swapping, tampering and malformed input, plus the
+  export contract (filename and sheet-name
   sanitising, every size limit, and the image allow-list).
 - `npm run typecheck` — strict TypeScript across the app.
 - `npm run build` — all routes prerender.

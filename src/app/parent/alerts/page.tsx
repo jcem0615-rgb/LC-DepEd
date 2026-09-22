@@ -119,10 +119,10 @@ export default function ParentAlertsPage() {
                         type="button"
                         className="btn btn-sm btn-secondary"
                         onClick={async () => {
-                          await recordGateEvent({ student: child, direction, method: 'dynamic' });
+                          await recordGateEvent({ student: child, direction, method: 'qr' });
                           await showNotification(
                             `${child.firstName} ${direction === 'in' ? 'entered' : 'left'} the school`,
-                            `Main Gate • verified dynamic e-ID`,
+                            'Main Gate • verified e-ID',
                             `gate-${child.id}`,
                           );
                           setNotice(null);

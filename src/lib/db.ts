@@ -86,7 +86,7 @@ export function getDb(): LcDepedDb {
   return instance;
 }
 
-const SEED_VERSION = 3;
+const SEED_VERSION = 4;
 
 let seedPromise: Promise<void> | null = null;
 

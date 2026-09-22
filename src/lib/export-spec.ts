@@ -61,8 +61,10 @@ export interface PdfSpec {
   rows: CellValue[][];
   totals?: CellValue[];
   notes?: string[];
-  /** Centred image printed between the meta block and the table (e.g. a QR e-ID). */
-  image?: PdfImage;
+  /** Centred images printed between the meta block and the table (portrait, QR). */
+  images?: PdfImage[];
+  /** Caption printed under the image row. */
+  imageCaption?: string;
   /** Signature lines printed at the end, e.g. ["Class adviser", "School head"]. */
   signatures?: string[];
   /** Set when the document is an image/notes card rather than a table. */
@@ -86,6 +88,7 @@ export const EXPORT_LIMITS = {
   metaRows: 20,
   titleChars: 200,
   imageBytes: 400_000,
+  images: 2,
 } as const;
 
 /** Strips anything that could escape the download filename. */
@@ -187,9 +190,14 @@ export function validatePdfSpec(input: unknown): string | null {
   if (spec.notes && (!Array.isArray(spec.notes) || spec.notes.length > EXPORT_LIMITS.notes)) {
     return 'Too many notes.';
   }
-  if (spec.image) {
-    const error = validateImage(spec.image);
-    if (error) return error;
+  if (spec.images) {
+    if (!Array.isArray(spec.images) || spec.images.length > EXPORT_LIMITS.images) {
+      return `At most ${EXPORT_LIMITS.images} images are allowed.`;
+    }
+    for (const image of spec.images) {
+      const error = validateImage(image);
+      if (error) return error;
+    }
     // An image card may legitimately carry no table.
     if (spec.tableOptional) return null;
   }
