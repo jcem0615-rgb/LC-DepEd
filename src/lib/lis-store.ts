@@ -18,6 +18,18 @@ export function storeConfigured(): boolean {
   return Boolean(URL_ENV && KEY_ENV);
 }
 
+/**
+ * Which of the two settings is absent. Names only, never values -- this is the
+ * same information the page's banner already gives, but specific enough to end
+ * the guessing when a deployment comes up unconfigured.
+ */
+export function missingStoreEnv(): string[] {
+  const missing: string[] = [];
+  if (!URL_ENV) missing.push('SUPABASE_URL');
+  if (!KEY_ENV) missing.push('SUPABASE_PUBLISHABLE_KEY');
+  return missing;
+}
+
 function headers(extra: Record<string, string> = {}): Record<string, string> {
   return {
     apikey: KEY_ENV as string,

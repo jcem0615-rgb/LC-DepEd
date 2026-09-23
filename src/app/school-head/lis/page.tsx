@@ -83,6 +83,7 @@ export default function LisSyncPage() {
   const [busy, setBusy] = useState(false);
   const [receipt, setReceipt] = useState<SyncReceipt | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [missingEnv, setMissingEnv] = useState<string[]>([]);
   const [history, setHistory] = useState<HistoryBatch[]>([]);
   const [storeReady, setStoreReady] = useState<boolean | null>(null);
 
@@ -114,6 +115,7 @@ export default function LisSyncPage() {
       });
       const body = await res.json();
       setStoreReady(Boolean(body.configured));
+      setMissingEnv(Array.isArray(body.missing) ? body.missing : []);
       setHistory(Array.isArray(body.batches) ? body.batches : []);
     } catch {
       setStoreReady(false);
@@ -216,9 +218,25 @@ export default function LisSyncPage() {
       {storeReady === false && (
         <div className="mb-4">
           <Banner tone="warning">
-            The transmittal store is not reachable, so batches cannot be recorded. Set{' '}
-            <code>SUPABASE_URL</code> and a Supabase key on the deployment. Validation and the upload
-            file still work.
+            The transmittal store is not reachable, so batches cannot be recorded.{' '}
+            {missingEnv.length > 0 ? (
+              <>
+                The deployment is missing{' '}
+                {missingEnv.map((name, i) => (
+                  <span key={name}>
+                    {i > 0 ? ' and ' : ''}
+                    <code>{name}</code>
+                  </span>
+                ))}
+                . Set {missingEnv.length > 1 ? 'them' : 'it'} for the Production environment, then
+                redeploy — Vercel binds variables to a deployment when it is built.
+              </>
+            ) : (
+              <>
+                Set <code>SUPABASE_URL</code> and a Supabase key on the deployment.
+              </>
+            )}{' '}
+            Validation and the upload file still work.
           </Banner>
         </div>
       )}

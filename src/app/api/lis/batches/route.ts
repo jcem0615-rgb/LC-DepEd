@@ -3,7 +3,7 @@
  * GET /api/lis/batches?batchId=…   — the rejected rows of one batch, LRNs masked.
  */
 import { NextResponse } from 'next/server';
-import { listBatches, listFindings, storeConfigured } from '@/lib/lis-store';
+import { listBatches, listFindings, missingStoreEnv, storeConfigured } from '@/lib/lis-store';
 import { adapterConfigured } from '@/lib/lis-adapter';
 
 export const runtime = 'nodejs';
@@ -15,7 +15,12 @@ export async function GET(request: Request) {
   const batchId = searchParams.get('batchId');
 
   if (!storeConfigured()) {
-    return NextResponse.json({ configured: false, adapter: adapterConfigured(), batches: [] });
+    return NextResponse.json({
+      configured: false,
+      adapter: adapterConfigured(),
+      batches: [],
+      missing: missingStoreEnv(),
+    });
   }
 
   try {
