@@ -251,6 +251,12 @@ validated, and the receipt tells the user the batch is ready for upload rather
 than claiming a transmission that did not happen. A transmission that fails is
 recorded as `transmission_failed` with the error, not silently dropped.
 
+**The write path is INSERT-only.** Rows go in with a plain `INSERT`, never an
+upsert: PostgREST's `resolution=merge-duplicates` compiles to
+`ON CONFLICT DO UPDATE`, which needs `UPDATE` and `SELECT` on `lis_rows` -- the
+very privileges withheld below. The grants are the design; the write path bends
+to them, not the other way round.
+
 **PII on the read path.** Learner rows are written but never read back through
 the API. `lis_rows` grants the publishable key no `SELECT`, `UPDATE` or
 `DELETE` — denied at the privilege level, not merely filtered by RLS — and the

@@ -128,10 +128,18 @@ export async function insertRows(
   });
 
   // Chunked so a whole-school roster does not exceed the request limit.
+  //
+  // A plain INSERT, deliberately. resolution=merge-duplicates would compile to
+  // ON CONFLICT DO UPDATE, which needs UPDATE and SELECT on lis_rows -- the two
+  // privileges withheld from the publishable key precisely so that learner
+  // records cannot be read back out through it. Idempotency does not depend on
+  // this write anyway: it is enforced a level up, by the unique fingerprint on
+  // lis_batches, so a re-sent roster returns its original receipt and never
+  // reaches this function twice.
   for (let i = 0; i < payload.length; i += 250) {
     const res = await rest('lis_rows', {
       method: 'POST',
-      headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+      headers: { Prefer: 'return=minimal' },
       body: JSON.stringify(payload.slice(i, i + 250)),
     });
     if (!res.ok) throw new Error(`Row write failed (${res.status}): ${await res.text()}`);

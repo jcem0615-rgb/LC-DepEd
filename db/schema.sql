@@ -558,9 +558,13 @@ CREATE TABLE IF NOT EXISTS lis_rows (
   guardian_name    text,
   guardian_contact text,
   accepted         boolean NOT NULL,
-  errors           jsonb   NOT NULL DEFAULT '[]'::jsonb,
-  -- Lets a chunked insert retry safely (Prefer: resolution=merge-duplicates).
-  UNIQUE (batch_id, lrn)
+  errors           jsonb   NOT NULL DEFAULT '[]'::jsonb
+  -- Deliberately no UNIQUE (batch_id, lrn). A roster may legitimately contain
+  -- the same LRN twice -- that is what the lrn_duplicate rule flags -- and both
+  -- rows must be storable for the findings table to show what was submitted.
+  -- A unique key here would also only be useful as an upsert conflict target,
+  -- and upserting needs UPDATE on this table, which the publishable key is not
+  -- given. Idempotency lives on lis_batches.fingerprint instead.
 );
 
 CREATE INDEX IF NOT EXISTS lis_rows_batch_idx ON lis_rows (batch_id);
