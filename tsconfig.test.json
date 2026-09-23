@@ -20,6 +20,7 @@
     "src/lib/format.ts",
     "tests/**/*.ts",
     "src/lib/export-spec.ts",
-    "src/lib/form-specs.ts"
+    "src/lib/form-specs.ts",
+    "src/lib/lis.ts"
   ]
 }

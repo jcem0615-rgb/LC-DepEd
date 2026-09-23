@@ -206,13 +206,68 @@ drives the anonymisation job; audit entries are retained independently.
 
 ---
 
-## 5. Testing
+## 5. LIS transmittal
 
-- `npm test` — 26 unit tests over the transmutation table, component weighting,
-  promotion/honours rules, e-ID signing, drift tolerance, tampering, expiry and
-  per-learner uniqueness, LRN swapping, tampering and malformed input, plus the
-  export contract (filename and sheet-name
-  sanitising, every size limit, and the image allow-list).
+The one place the app keeps server-side state. Everything else is device-local
+by design, but a submission receipt has to outlive the browser that made it —
+a School Head needs to know, next week and from a different phone, that the
+roster went in.
+
+```
+browser                      /api/lis/sync                    Postgres        DepEd
+  │ validateBatch() locally        │                              │              │
+  ├───── rows ────────────────────►│ re-validate                  │              │
+  │                                ├─ fingerprint (SHA-256)       │              │
+  │                                ├─ existing? ──────────────────►│             │
+  │                                │   yes → return that receipt   │             │
+  │                                ├─ insert batch + rows ────────►│             │
+  │                                ├─ transmit accepted rows ──────┼────────────►│
+  │◄──── receipt ──────────────────┤ patch status + reference ────►│             │
+```
+
+**Validation (`lib/lis.ts`).** Ten rules, each with a stable code:
+`lrn_format`, `lrn_duplicate`, `missing_name`, `sex_invalid`,
+`birth_date_invalid`, `age_implausible`, `grade_range`, `missing_section`,
+`missing_guardian`, `contact_format`. A batch comes back `validated`,
+`partially_accepted` or `rejected`. The same function runs in the browser for
+the pre-flight panel and again in the route handler, so a hand-crafted request
+cannot skip it.
+
+**Idempotency.** `batchFingerprint()` hashes the canonicalised, sorted rows.
+The fingerprint is unique in `lis_batches`, so re-sending an unchanged roster —
+a double tap, a retry after a dropped connection — returns the original receipt
+and transmits nothing a second time. Changing one learner changes the
+fingerprint and makes it a new batch.
+
+**Only accepted rows leave the school.** `lib/lis-adapter.ts` filters the payload
+to rows that passed validation before it posts upstream. Held-back learners stay
+in the store for the school to fix.
+
+**The adapter is a seam, not a simulation.** The real LIS has no public API —
+schools upload through its portal with a spreadsheet template. With no
+`LIS_API_BASE` configured, `transmitToLis()` returns
+`{ transmitted: false, reason: 'not_configured' }`, the batch is recorded as
+validated, and the receipt tells the user the batch is ready for upload rather
+than claiming a transmission that did not happen. A transmission that fails is
+recorded as `transmission_failed` with the error, not silently dropped.
+
+**PII on the read path.** Learner rows are written but never read back through
+the API. `lis_rows` grants the publishable key no `SELECT`, `UPDATE` or
+`DELETE` — denied at the privilege level, not merely filtered by RLS — and the
+history endpoint reads `lis_batch_findings`, a `security_invoker = off` view
+that masks the LRN to `123******123`. So the key that ships in the deployment
+can record a transmittal and show its counts, and can extract nothing.
+
+---
+
+## 6. Testing
+
+- `npm test` — 35 unit tests over the transmutation table (every published
+  boundary pinned), component weighting, promotion/honours rules, e-ID signing,
+  per-learner uniqueness, LRN swapping, tampering and malformed input, the
+  export contract (filename and sheet-name sanitising, every size limit, and the
+  image allow-list), and the LIS rules (each finding code, batch status,
+  fingerprint stability and sensitivity, LRN masking, template column order).
 - `npm run typecheck` — strict TypeScript across the app.
 - `npm run build` — all routes prerender.
 
@@ -222,6 +277,13 @@ grading, form generation and approval, DLL, IPCRF, NTP routing, LIS sync, intake
 revalidation, tenant provisioning, flags, VAPID rotation), and PWA behaviour:
 service-worker activation, offline navigation from cache, offline writes landing in
 the queue, automatic drain on reconnect, and the offline fallback page.
+
+The LIS pipeline was driven end to end against a PostgREST stub: idempotent
+re-sends returning the original receipt, masked findings on the history endpoint,
+a transmission carrying only the accepted rows, a failing endpoint recorded as
+`transmission_failed`, an unconfigured store answering 503, an unreachable store
+answering 502, and the browser flow through send, receipt, held-back table,
+history across a reload, and the upload-file download.
 
 Every export button was driven in the browser and the downloaded files inspected:
 the workbooks were re-opened with an independent Excel parser (sheet names, frozen

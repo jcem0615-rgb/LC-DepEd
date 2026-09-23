@@ -1,5 +1,5 @@
 /* LC-DepEd service worker — offline-first shell + Web Push. */
-const VERSION = 'lc-deped-v1';
+const VERSION = 'lc-deped-v2';
 const SHELL_CACHE = `${VERSION}-shell`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 const OFFLINE_URL = '/offline';
@@ -50,6 +50,11 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+
+  // API responses are live data — never serve them from the cache. Without this
+  // a stale-while-revalidate hit can hand back a response from page load and
+  // silently ignore the caller's cache: 'no-store'.
+  if (url.pathname.startsWith('/api/')) return;
 
   // App navigations: network first, fall back to cache, then the offline page.
   if (request.mode === 'navigate') {

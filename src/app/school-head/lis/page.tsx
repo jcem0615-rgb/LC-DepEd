@@ -1,99 +1,195 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useSession } from '@/components/providers';
 import { useLiveData } from '@/lib/store';
-import { getDb, getSetting, setSetting } from '@/lib/db';
+import { getDb } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
 import { workbook } from '@/lib/export';
 import { XlsxButton } from '@/components/export-buttons';
 import { formatDateTime, fullName } from '@/lib/format';
+import {
+  LIS_COLUMNS,
+  LIS_RULES,
+  toLisRow,
+  validateBatch,
+  type LisLearnerInput,
+  type LisRuleCode,
+} from '@/lib/lis';
 import { Badge, Banner, Card, Loading, PageHeader, ProgressBar, StatTile } from '@/components/ui';
 import { Icon } from '@/components/icons';
+import type { Section, Student } from '@/lib/types';
 
-const STEPS = [
-  'Validating LRN check digits',
-  'Checking for duplicate enrolments',
-  'Matching sections to LIS class records',
-  'Uploading enrolment deltas',
-  'Reconciling transfer-in / transfer-out',
-];
+interface SyncReceipt {
+  batchId: string;
+  idempotent: boolean;
+  status: string;
+  accepted: number;
+  rejected: number;
+  findings: { code: LisRuleCode; message: string; count: number }[];
+  submittedAt: string;
+  transmission: { configured: boolean; reference: string | null; error: string | null };
+}
+
+interface HistoryBatch {
+  id: string;
+  submitted_at: string;
+  row_count: number;
+  accepted_count: number;
+  rejected_count: number;
+  status: string;
+  transmission_ref: string | null;
+  transmission_error: string | null;
+}
+
+const STATUS_TONE: Record<string, 'success' | 'warning' | 'danger' | 'info' | 'neutral'> = {
+  transmitted: 'success',
+  validated: 'info',
+  partially_accepted: 'warning',
+  rejected: 'danger',
+  transmission_failed: 'danger',
+};
+
+const STATUS_LABEL: Record<string, string> = {
+  transmitted: 'Transmitted to LIS',
+  validated: 'Validated — ready for upload',
+  partially_accepted: 'Partly accepted',
+  rejected: 'Rejected',
+  transmission_failed: 'Transmission failed',
+};
+
+/** Learner records in the shape the LIS expects. */
+function toLisRows(students: Student[], sections: Section[]): LisLearnerInput[] {
+  const sectionName = new Map(sections.map((s) => [s.id, s.name]));
+  return students.map((s) => ({
+    lrn: s.lrn,
+    lastName: s.lastName,
+    firstName: s.firstName,
+    middleName: s.middleName,
+    sex: s.sex,
+    birthDate: s.birthDate,
+    gradeLevel: s.gradeLevel,
+    section: sectionName.get(s.sectionId) ?? '',
+    guardianName: s.guardianName,
+    guardianContact: s.guardianContact,
+    motherTongue: s.motherTongue,
+    address: s.address,
+  }));
+}
 
 export default function LisSyncPage() {
   const { session } = useSession();
   const tenantId = session?.tenantId ?? '';
-  const [step, setStep] = useState(-1);
-  const [done, setDone] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [receipt, setReceipt] = useState<SyncReceipt | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [history, setHistory] = useState<HistoryBatch[]>([]);
+  const [storeReady, setStoreReady] = useState<boolean | null>(null);
 
   const { data, loading } = useLiveData(async () => {
     if (!tenantId) return null;
     const db = getDb();
-    const [students, sections, lastSync] = await Promise.all([
+    const [students, sections, tenant] = await Promise.all([
       db.students.where('tenantId').equals(tenantId).toArray(),
       db.sections.where('tenantId').equals(tenantId).toArray(),
-      getSetting('last_lis_sync', ''),
+      db.tenants.get(tenantId),
     ]);
-    const seen = new Set<string>();
-    const duplicates = students.filter((s) => {
-      if (seen.has(s.lrn)) return true;
-      seen.add(s.lrn);
-      return false;
-    });
-    const malformed = students.filter((s) => !/^\d{12}$/.test(s.lrn));
-    const missingGuardian = students.filter((s) => !s.guardianName || !s.guardianContact);
-    return { students, sections, duplicates, malformed, missingGuardian, lastSync };
-  }, [tenantId]);
+    const rows = toLisRows(students, sections);
+    return { students, sections, tenant: tenant ?? null, rows, validation: validateBatch({
+      schoolId: tenant?.schoolId ?? '',
+      schoolName: tenant?.name ?? '',
+      schoolYear: sections[0]?.schoolYear ?? '',
+      submittedBy: session?.userId ?? '',
+      rows,
+    }) };
+  }, [tenantId, session?.userId]);
 
-  async function runSync() {
-    if (!session) return;
-    setDone(false);
-    for (let i = 0; i < STEPS.length; i += 1) {
-      setStep(i);
-      await new Promise((r) => setTimeout(r, 450));
+  const schoolId = data?.tenant?.schoolId ?? '';
+
+  const loadHistory = useCallback(async () => {
+    if (!schoolId) return;
+    try {
+      const res = await fetch(`/api/lis/batches?schoolId=${encodeURIComponent(schoolId)}`, {
+        cache: 'no-store',
+      });
+      const body = await res.json();
+      setStoreReady(Boolean(body.configured));
+      setHistory(Array.isArray(body.batches) ? body.batches : []);
+    } catch {
+      setStoreReady(false);
     }
-    await setSetting('last_lis_sync', String(Date.now()));
-    await logAudit({
-      actorId: session.userId,
-      actorRole: session.role,
-      action: 'LIS_SYNC',
-      target: `tenant:${tenantId}`,
-      tenantId: session.tenantId,
-      piiAccessed: true,
-    });
-    setStep(-1);
-    setDone(true);
+  }, [schoolId]);
+
+  useEffect(() => {
+    void loadHistory();
+  }, [loadHistory]);
+
+  async function sendTransmittal() {
+    if (!session || !data?.tenant) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/lis/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          schoolId: data.tenant.schoolId,
+          schoolName: data.tenant.name,
+          schoolYear: data.sections[0]?.schoolYear ?? '',
+          submittedBy: session.userId,
+          rows: data.rows,
+        }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        setError(body.error ?? 'The transmittal could not be sent.');
+      } else {
+        setReceipt(body as SyncReceipt);
+        await logAudit({
+          actorId: session.userId,
+          actorRole: session.role,
+          action: 'LIS_TRANSMITTAL',
+          target: `batch:${body.batchId}`,
+          tenantId: session.tenantId,
+          piiAccessed: true,
+        });
+        await loadHistory();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'The transmittal could not be sent.');
+    }
+    setBusy(false);
   }
 
   if (loading || !data) return <Loading rows={5} />;
 
-  const issues = data.duplicates.length + data.malformed.length + data.missingGuardian.length;
+  const { validation } = data;
+  const blocked = validation.accepted === 0;
 
   return (
     <>
       <PageHeader
-        title="LIS integration"
-        description="Push enrolment and transfer data to the DepEd Learner Information System once validation passes."
+        title="LIS transmittal"
+        description="Validate enrolment against the Learner Information System rules, then record the transmittal. Rejected rows stay behind with the reason, so only clean records go."
         actions={
           <XlsxButton
-            label="Export LIS file"
+            label="LIS upload file"
+            disabled={!data.rows.length}
             build={() =>
               workbook(
-                'LIS-enrolment-export',
-                'LIS enrolment export',
-                ['LRN', 'Last name', 'First name', 'Middle name', 'Sex', 'Birth date', 'Grade level', 'Section', 'Address', 'Guardian', 'Contact'],
-                data.students.map((s) => [
-                  s.lrn, s.lastName, s.firstName, s.middleName, s.sex, s.birthDate,
-                  s.gradeLevel, data.sections.find((sec) => sec.id === s.sectionId)?.name ?? '',
-                  s.address, s.guardianName, s.guardianContact,
-                ]),
+                `LIS-${data.tenant?.schoolId ?? 'school'}-${data.sections[0]?.schoolYear ?? ''}`,
+                'LIS enrolment upload',
+                [...LIS_COLUMNS],
+                data.rows.filter((_, i) => validation.rows[i]?.accepted).map(toLisRow),
                 {
                   sheetName: 'Enrolment',
-                  subtitle: 'Learner Information System transmittal',
+                  subtitle: 'Accepted rows only, in LIS template column order',
                   meta: [
-                    { label: 'Learners', value: String(data.students.length) },
-                    { label: 'Sections', value: String(data.sections.length) },
+                    { label: 'School ID', value: data.tenant?.schoolId ?? '—' },
+                    { label: 'School year', value: data.sections[0]?.schoolYear ?? '—' },
+                    { label: 'Rows', value: String(validation.accepted) },
                   ],
-                  notes: ['Contains personal data — handle under RA 10173 and delete local copies after transmittal.'],
+                  notes: ['Contains personal data — handle under RA 10173 and delete local copies after upload.'],
                 },
               )
             }
@@ -101,82 +197,186 @@ export default function LisSyncPage() {
         }
       />
 
-      <div className="mb-4 grid gap-3 sm:grid-cols-3">
-        <StatTile label="Learners to sync" value={data.students.length} hint={`${data.sections.length} sections`} />
+      <div className="mb-4 grid gap-3 sm:grid-cols-4">
+        <StatTile label="Learners in scope" value={data.rows.length} />
+        <StatTile label="Pass validation" value={validation.accepted} tone="success" />
         <StatTile
-          label="Validation issues"
-          value={issues}
-          tone={issues ? 'warning' : 'success'}
-          hint={issues ? 'Resolve before syncing' : 'All records pass validation'}
+          label="Held back"
+          value={validation.rejected}
+          tone={validation.rejected ? 'warning' : 'success'}
         />
         <StatTile
-          label="Last sync"
-          value={data.lastSync ? formatDateTime(Number(data.lastSync)) : 'Never'}
+          label="Transmittals sent"
+          value={history.length}
           tone="info"
+          hint={history[0] ? formatDateTime(history[0].submitted_at) : 'None yet'}
         />
       </div>
 
-      {done && (
+      {storeReady === false && (
         <div className="mb-4">
-          <Banner tone="success">
-            Enrolment data pushed to the LIS. A reconciliation receipt was written to the audit trail.
+          <Banner tone="warning">
+            The transmittal store is not reachable, so batches cannot be recorded. Set{' '}
+            <code>SUPABASE_URL</code> and a Supabase key on the deployment. Validation and the upload
+            file still work.
+          </Banner>
+        </div>
+      )}
+
+      {error && (
+        <div className="mb-4">
+          <Banner tone="danger">{error}</Banner>
+        </div>
+      )}
+
+      {receipt && (
+        <div className="mb-4">
+          <Banner tone={receipt.rejected === 0 ? 'success' : 'warning'}>
+            <p className="font-semibold">
+              {receipt.idempotent
+                ? 'This enrolment data was already transmitted — the original receipt stands.'
+                : 'Transmittal recorded.'}{' '}
+              {STATUS_LABEL[receipt.status] ?? receipt.status}
+            </p>
+            <p className="mt-1 text-sm">
+              Batch <code className="font-mono">{receipt.batchId.slice(0, 8)}</code> •{' '}
+              {receipt.accepted} accepted • {receipt.rejected} held back
+              {receipt.transmission.reference ? ` • DepEd ref ${receipt.transmission.reference}` : ''}
+            </p>
+            {!receipt.transmission.configured && (
+              <p className="mt-1 text-sm">
+                No DepEd endpoint is configured, so the batch is validated and waiting for the portal
+                upload — use the LIS upload file above.
+              </p>
+            )}
+            {receipt.transmission.error && (
+              <p className="mt-1 text-sm">Transmission error: {receipt.transmission.error}</p>
+            )}
           </Banner>
         </div>
       )}
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card title="Pre-sync validation">
-          <ul className="space-y-2 text-sm">
-            <ValidationRow label="LRN format (12 digits)" failures={data.malformed.length} />
-            <ValidationRow label="Duplicate LRNs" failures={data.duplicates.length} />
-            <ValidationRow label="Guardian contact present" failures={data.missingGuardian.length} />
-            <ValidationRow label="Section assignment present" failures={data.students.filter((s) => !s.sectionId).length} />
-          </ul>
+        <Card title="Pre-transmittal validation" subtitle="The same rules the LIS applies on upload">
+          <ProgressBar
+            value={data.rows.length ? (validation.accepted / data.rows.length) * 100 : 0}
+            tone={validation.rejected === 0 ? 'success' : 'warning'}
+          />
+          <p className="mt-2 text-sm text-slate-600">
+            {validation.accepted} of {data.rows.length} learner records pass.
+          </p>
 
-          {step >= 0 ? (
-            <div className="mt-4">
-              <ProgressBar value={((step + 1) / STEPS.length) * 100} />
-              <p className="mt-2 text-sm font-semibold text-slate-600">{STEPS[step]}…</p>
+          {validation.findings.length === 0 ? (
+            <div className="mt-3">
+              <Banner tone="success">Every record passes the LIS rules.</Banner>
             </div>
           ) : (
-            <button type="button" className="btn-primary mt-4 w-full" onClick={() => void runSync()}>
-              <Icon name="cloud" className="h-5 w-5" />
-              Start LIS sync
-            </button>
-          )}
-          <p className="mt-2 text-xs text-slate-500">
-            The demo runs the validation pipeline locally. Point{' '}
-            <code className="rounded bg-slate-100 px-1">NEXT_PUBLIC_API_BASE</code> at your LIS gateway
-            to transmit for real.
-          </p>
-        </Card>
-
-        <Card title="Records flagged" subtitle="Fix these before pushing to the LIS">
-          {issues === 0 ? (
-            <Banner tone="success">All learner records pass the LIS validation rules.</Banner>
-          ) : (
-            <ul className="space-y-2 text-sm">
-              {[...data.malformed, ...data.duplicates, ...data.missingGuardian].slice(0, 12).map((s, i) => (
-                <li key={`${s.id}-${i}`} className="flex items-center justify-between gap-2 rounded-lg bg-amber-50 px-3 py-2">
-                  <span className="font-semibold text-amber-900">{fullName(s)}</span>
-                  <span className="font-mono text-xs text-amber-800">{s.lrn}</span>
+            <ul className="mt-3 space-y-2 text-sm">
+              {validation.findings.map((f) => (
+                <li key={f.code} className="flex items-start justify-between gap-2">
+                  <span className="text-slate-700">{f.message}</span>
+                  <Badge tone="warning">{f.count}</Badge>
                 </li>
               ))}
             </ul>
           )}
+
+          <button
+            type="button"
+            className="btn-primary mt-4 w-full"
+            disabled={busy || blocked}
+            onClick={() => void sendTransmittal()}
+          >
+            <Icon name="cloud" className="h-5 w-5" />
+            {busy ? 'Sending…' : `Send transmittal (${validation.accepted} learners)`}
+          </button>
+          {blocked && (
+            <p className="mt-2 text-xs text-rose-700">
+              Nothing passes validation yet, so there is nothing to send.
+            </p>
+          )}
+          <p className="mt-2 text-xs text-slate-500">
+            Re-sending the same enrolment data returns the original receipt instead of creating a
+            second transmittal.
+          </p>
+        </Card>
+
+        <Card title="Records held back" subtitle="Fix these, then send again">
+          {validation.rejected === 0 ? (
+            <Banner tone="success">Nothing is being held back.</Banner>
+          ) : (
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Learner</th>
+                    <th>LRN</th>
+                    <th>Why it is held back</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {validation.rows
+                    .map((row, i) => ({ row, student: data.students[i] }))
+                    .filter(({ row }) => !row.accepted)
+                    .slice(0, 25)
+                    .map(({ row, student }) => (
+                      <tr key={`${row.lrn}-${student?.id ?? ''}`}>
+                        <td className="font-semibold">{student ? fullName(student) : '—'}</td>
+                        <td className="font-mono text-xs">{row.lrn}</td>
+                        <td className="text-xs">
+                          {row.errors.map((code) => LIS_RULES[code]).join('; ')}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </Card>
       </div>
-    </>
-  );
-}
 
-function ValidationRow({ label, failures }: { label: string; failures: number }) {
-  return (
-    <li className="flex items-center justify-between gap-2">
-      <span className="text-slate-700">{label}</span>
-      <Badge tone={failures === 0 ? 'success' : 'danger'}>
-        {failures === 0 ? 'Pass' : `${failures} issue${failures === 1 ? '' : 's'}`}
-      </Badge>
-    </li>
+      <Card className="mt-4" title="Transmittal history" subtitle="Recorded server-side, shared across devices">
+        {history.length === 0 ? (
+          <p className="text-sm text-slate-500">
+            {storeReady === false
+              ? 'Unavailable while the transmittal store is unreachable.'
+              : 'No transmittals recorded yet.'}
+          </p>
+        ) : (
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Sent</th>
+                  <th>Batch</th>
+                  <th>Learners</th>
+                  <th>Accepted</th>
+                  <th>Held back</th>
+                  <th>Status</th>
+                  <th>DepEd reference</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.map((batch) => (
+                  <tr key={batch.id}>
+                    <td className="whitespace-nowrap text-xs">{formatDateTime(batch.submitted_at)}</td>
+                    <td className="font-mono text-xs">{batch.id.slice(0, 8)}</td>
+                    <td>{batch.row_count}</td>
+                    <td>{batch.accepted_count}</td>
+                    <td>{batch.rejected_count}</td>
+                    <td>
+                      <Badge tone={STATUS_TONE[batch.status] ?? 'neutral'}>
+                        {STATUS_LABEL[batch.status] ?? batch.status}
+                      </Badge>
+                    </td>
+                    <td className="font-mono text-xs">{batch.transmission_ref ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </>
   );
 }

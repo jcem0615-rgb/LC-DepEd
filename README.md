@@ -97,12 +97,17 @@ Install it as an app from the browser's install prompt (the header shows an
 
 ### Environment variables
 
-Both are optional — the app runs fully without them.
+All are optional — the app runs fully without them, and each one degrades to a
+stated fallback rather than an error.
 
 | Variable | Effect |
 | --- | --- |
 | `NEXT_PUBLIC_API_BASE` | Points the offline sync queue at a real backend (`POST {base}/sync`). Unset, the queue simulates a successful round-trip. |
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | Enables real Web Push subscriptions. Unset, notifications are shown locally through the service worker. |
+| `SUPABASE_URL` | Postgres project that stores LIS transmittal receipts. Unset, the LIS page says the store is unavailable and offers the spreadsheet upload only. |
+| `SUPABASE_SERVICE_ROLE_KEY` | Preferred key for the transmittal store. Falls back to `SUPABASE_PUBLISHABLE_KEY`, then `NEXT_PUBLIC_SUPABASE_ANON_KEY`. |
+| `LIS_API_BASE` | DepEd enrolment endpoint (`POST {base}/enrolment`). Unset, a batch is validated and recorded but not transmitted, and the receipt says so. |
+| `LIS_API_KEY` | Bearer token sent to `LIS_API_BASE`, if that endpoint wants one. |
 
 ---
 
@@ -121,6 +126,9 @@ Both are optional — the app runs fully without them.
 - **ExcelJS + PDFKit behind two route handlers** — real `.xlsx` and PDF rendering
   stays on the server, so the phone downloads a finished file instead of a
   megabyte of formatting code.
+- **Postgres behind the LIS transmittal** (`/api/lis/*`) — the one place the app
+  keeps server-side state, because a submission receipt has to outlive the
+  browser that made it.
 
 ### Exports
 
@@ -146,6 +154,33 @@ front of them; the portals already write the export to the audit trail.
 from the device and the PDF button opens the print dialog scoped to the form on
 screen. The button says which path it took.
 
+### LIS sync
+
+The School Head portal's **LIS sync** page transmits the enrolment roster to the
+Learner Information System. It is a real pipeline, not a progress bar:
+
+1. **Validate locally.** Ten rules run over the roster before anything leaves the
+   device — LRN format and duplicates, missing names, sex, birth date and
+   plausible age, grade level range, section, guardian, and contact format. The
+   page shows the accepted count and a **Records held back** table naming every
+   rejected learner and why.
+2. **Record the transmittal.** `POST /api/lis/sync` re-validates server-side,
+   then writes the batch and its rows to Postgres. Batches are keyed by a
+   SHA-256 fingerprint of the canonicalised rows, so re-sending an unchanged
+   roster returns the original receipt instead of creating a duplicate.
+3. **Transmit.** Only the accepted rows go upstream, to `LIS_API_BASE`. The real
+   LIS has no public API — schools upload through its portal with a spreadsheet
+   template — so with no endpoint configured the batch stops here and the receipt
+   says exactly that. `lib/lis-adapter.ts` is the seam: point it at an endpoint
+   and nothing else in the pipeline changes.
+4. **Upload file.** The **LIS upload file** button exports the accepted rows as
+   `.xlsx` in the LIS template column order, for the portal upload.
+
+`GET /api/lis/batches` backs the **Transmittal history** table, which survives a
+reload because it is server-side. Findings read back through a view that masks
+the LRN (`123******123`), and the row table grants the publishable key no
+`SELECT` at all, so learner records cannot be read back out with a public key.
+
 ### What is real and what is simulated
 
 This repository is a complete, runnable **front end**. To keep it usable with no
@@ -157,6 +192,7 @@ infrastructure, the demo build stands in for the backend in three places:
 | Persistence | IndexedDB via Dexie | PostgreSQL with Row-Level Security — schema in [`db/schema.sql`](db/schema.sql) |
 | Sync upload | Queue drains against a simulated round-trip | `POST {NEXT_PUBLIC_API_BASE}/sync` with the same queue records |
 | Push delivery | Service-worker local notifications | VAPID Web Push from the server |
+| LIS transmittal | Real — validated, stored in Postgres, idempotent. Transmission is a no-op unless `LIS_API_BASE` is set, and says so | Set `LIS_API_BASE` to the DepEd endpoint |
 | Document export | Real — the same ExcelJS/PDFKit routes run in both | Add the session check in front of the route |
 
 Everything else — the grading engine, transmutation table, form generation, XLSX
@@ -179,6 +215,8 @@ src/
     teacher/ student/ parent/ school-head/ sdo/ superadmin/
     api/export/xlsx/       ExcelJS workbook renderer
     api/export/pdf/        PDFKit document renderer
+    api/lis/sync/          LIS batch validation, storage and transmission
+    api/lis/batches/       transmittal history and masked findings
   components/              app shell, UI primitives, SVG charts, school forms, QR,
                            export buttons with offline fallbacks
   lib/
@@ -186,6 +224,9 @@ src/
     eid.ts                 dynamic/static e-ID signing and verification
     crypto.ts              HMAC, AES-256-GCM, PBKDF2 over Web Crypto
     export-spec.ts         shared export contract + input validation
+    lis.ts                 LIS validation rules, batch fingerprint, LRN masking
+    lis-store.ts           transmittal store over Supabase PostgREST
+    lis-adapter.ts         DepEd LIS endpoint seam
     form-specs.ts          SF1/SF2/SF5/SF9/SF10 projections for XLSX and PDF
     db.ts  store.ts        Dexie schema, seeding, reactive query hook
     queries.ts             reads and mutations shared by the portals
@@ -195,7 +236,7 @@ src/
   data/seed.ts             deterministic synthetic school
 db/schema.sql              PostgreSQL schema with RLS and anonymising views
 docs/ARCHITECTURE.md       sync strategy, e-ID protocol, RBAC, privacy design
-tests/                     grading, e-ID and export-contract unit tests (node:test)
+tests/                     grading, e-ID, export-contract and LIS unit tests (node:test)
 ```
 
 ---

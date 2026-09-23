@@ -505,3 +505,97 @@ FROM attendance a
 JOIN students s ON s.id = a.student_id
 GROUP BY a.tenant_id, s.lrn
 HAVING count(*) FILTER (WHERE a.status = 'absent') >= 4;
+
+-- ---------------------------------------------------------------------
+-- LIS transmittal
+--   The one server-side store the app actually uses: a School Head needs
+--   to see, next week and from a different phone, that the roster went in.
+--   Deployed to the project named by SUPABASE_URL; see src/lib/lis-store.ts.
+--
+--   Read-path privacy: the deployment's publishable key can record a
+--   transmittal and read batch-level counts, and nothing else. `lis_rows`
+--   grants it no SELECT at all, so learner records cannot be pulled back
+--   out with a key that ships to the browser; rejected rows are surfaced
+--   only through `lis_batch_findings`, which masks the LRN.
+-- ---------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS lis_batches (
+  id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  -- SHA-256 over the canonicalised, sorted rows. UNIQUE is what makes a
+  -- re-send idempotent: the same roster returns its original receipt.
+  fingerprint        text        NOT NULL UNIQUE,
+  school_id          text        NOT NULL,
+  school_name        text,
+  school_year        text        NOT NULL,
+  submitted_by       text        NOT NULL,
+  submitted_at       timestamptz NOT NULL DEFAULT now(),
+  row_count          integer     NOT NULL,
+  accepted_count     integer     NOT NULL DEFAULT 0,
+  rejected_count     integer     NOT NULL DEFAULT 0,
+  status             text        NOT NULL
+    CHECK (status IN ('validated','partially_accepted','rejected',
+                      'transmitted','transmission_failed')),
+  findings           jsonb       NOT NULL DEFAULT '[]'::jsonb,
+  transmitted_at     timestamptz,
+  transmission_ref   text,
+  transmission_error text
+);
+
+CREATE INDEX IF NOT EXISTS lis_batches_school_idx
+  ON lis_batches (school_id, submitted_at DESC);
+
+CREATE TABLE IF NOT EXISTS lis_rows (
+  id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  batch_id         uuid    NOT NULL REFERENCES lis_batches (id) ON DELETE CASCADE,
+  lrn              text    NOT NULL,
+  last_name        text,
+  first_name       text,
+  middle_name      text,
+  sex              text,
+  birth_date       date,
+  grade_level      integer,
+  section          text,
+  guardian_name    text,
+  guardian_contact text,
+  accepted         boolean NOT NULL,
+  errors           jsonb   NOT NULL DEFAULT '[]'::jsonb,
+  -- Lets a chunked insert retry safely (Prefer: resolution=merge-duplicates).
+  UNIQUE (batch_id, lrn)
+);
+
+CREATE INDEX IF NOT EXISTS lis_rows_batch_idx ON lis_rows (batch_id);
+
+ALTER TABLE lis_batches ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lis_rows    ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS lis_batches_insert ON lis_batches;
+CREATE POLICY lis_batches_insert ON lis_batches FOR INSERT TO anon WITH CHECK (true);
+DROP POLICY IF EXISTS lis_batches_select ON lis_batches;
+CREATE POLICY lis_batches_select ON lis_batches FOR SELECT TO anon USING (true);
+DROP POLICY IF EXISTS lis_batches_update ON lis_batches;
+CREATE POLICY lis_batches_update ON lis_batches FOR UPDATE TO anon USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS lis_rows_insert ON lis_rows;
+CREATE POLICY lis_rows_insert ON lis_rows FOR INSERT TO anon WITH CHECK (true);
+
+-- Belt and braces. Supabase's default grants are permissive, so RLS ends up
+-- the only thing standing between the publishable key and learner rows — and
+-- a policy that is dropped by accident fails open with a silent empty result.
+-- Revoking first makes the same read fail at the privilege level instead.
+REVOKE ALL ON lis_rows    FROM anon, authenticated;
+REVOKE ALL ON lis_batches FROM anon, authenticated;
+GRANT INSERT                 ON lis_rows    TO anon;
+GRANT SELECT, INSERT, UPDATE ON lis_batches TO anon;
+
+-- Rejected rows, LRN masked, for the "Records held back" table. SECURITY
+-- INVOKER is deliberately off: the view owner's rights are what let the
+-- caller see the masked projection without any grant on `lis_rows` itself.
+CREATE OR REPLACE VIEW lis_batch_findings
+  WITH (security_invoker = off) AS
+SELECT
+  r.batch_id,
+  left(r.lrn, 3) || '******' || right(r.lrn, 3) AS masked_lrn,
+  r.errors
+FROM lis_rows r
+WHERE r.accepted = false;
+
+GRANT SELECT ON lis_batch_findings TO anon;
