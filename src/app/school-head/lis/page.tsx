@@ -223,7 +223,9 @@ export default function LisSyncPage() {
         </div>
       )}
 
-      {error && (
+      {/* The standing warning above already names the missing configuration --
+          don't stack a second banner saying the same thing. */}
+      {error && storeReady !== false && (
         <div className="mb-4">
           <Banner tone="danger">{error}</Banner>
         </div>
