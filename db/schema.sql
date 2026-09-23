@@ -536,6 +536,12 @@ CREATE TABLE IF NOT EXISTS lis_batches (
     CHECK (status IN ('validated','partially_accepted','rejected',
                       'transmitted','transmission_failed')),
   findings           jsonb       NOT NULL DEFAULT '[]'::jsonb,
+  -- A batch row is written before its learner rows, so a failure between the
+  -- two leaves a batch with no rows. Idempotency keys off this flag, not on the
+  -- batch's mere existence: without it a half-written batch is mistaken for a
+  -- finished transmittal and its receipt is handed back to every retry, so the
+  -- rows are never written while the page reports success.
+  rows_written       boolean     NOT NULL DEFAULT false,
   transmitted_at     timestamptz,
   transmission_ref   text,
   transmission_error text

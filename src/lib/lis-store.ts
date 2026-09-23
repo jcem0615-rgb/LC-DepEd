@@ -60,6 +60,8 @@ export interface StoredBatch {
   accepted_count: number;
   rejected_count: number;
   status: string;
+  /** False when the batch row landed but its learner rows did not. */
+  rows_written: boolean;
   findings: { code: string; message: string; count: number }[];
   transmitted_at: string | null;
   transmission_ref: string | null;
@@ -144,6 +146,16 @@ export async function insertRows(
     });
     if (!res.ok) throw new Error(`Row write failed (${res.status}): ${await res.text()}`);
   }
+}
+
+/** Marks a batch complete once every learner row has landed. */
+export async function markRowsWritten(batchId: string): Promise<void> {
+  const res = await rest(`lis_batches?id=eq.${batchId}`, {
+    method: 'PATCH',
+    headers: { Prefer: 'return=minimal' },
+    body: JSON.stringify({ rows_written: true }),
+  });
+  if (!res.ok) throw new Error(`Completion flag failed (${res.status}): ${await res.text()}`);
 }
 
 export async function markTransmission(

@@ -239,6 +239,15 @@ a double tap, a retry after a dropped connection — returns the original receip
 and transmits nothing a second time. Changing one learner changes the
 fingerprint and makes it a new batch.
 
+**…but only for a batch that finished.** The batch row is written before its
+learner rows, so a failure between the two leaves a batch with no rows. Keying
+idempotency on the batch's mere existence turns that into a trap: every retry
+matches the fingerprint, gets the half-written batch's receipt, and returns
+success while the rows are never written. `rows_written` marks a batch complete;
+a batch without it is resumed on the next send — same batch, no duplicate — and
+only then does the transmission step run. `tests/` drives this directly by
+failing the row write and retrying.
+
 **Only accepted rows leave the school.** `lib/lis-adapter.ts` filters the payload
 to rows that passed validation before it posts upstream. Held-back learners stay
 in the store for the school to fix.

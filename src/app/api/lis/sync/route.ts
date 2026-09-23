@@ -11,6 +11,7 @@ import {
   findBatchByFingerprint,
   insertBatch,
   insertRows,
+  markRowsWritten,
   markTransmission,
   storeConfigured,
 } from '@/lib/lis-store';
@@ -64,9 +65,13 @@ export async function POST(request: Request) {
   const fingerprint = await batchFingerprint(input);
 
   try {
-    // Idempotency: identical enrolment data reuses the original receipt.
+    // Idempotency: identical enrolment data reuses the original receipt -- but
+    // only once the batch is complete. A batch row is written before its learner
+    // rows, so a failure between the two leaves a batch with no rows. Treating
+    // that as a finished transmittal would hand its receipt back to every retry
+    // and the rows would never be written, with the page reporting success.
     const existing = await findBatchByFingerprint(fingerprint);
-    if (existing) {
+    if (existing && existing.rows_written) {
       return NextResponse.json({
         batchId: existing.id,
         idempotent: true,
@@ -84,8 +89,11 @@ export async function POST(request: Request) {
       });
     }
 
-    const batch = await insertBatch(input, fingerprint, validation);
+    // Resume a half-written batch rather than creating a duplicate: its
+    // fingerprint is already taken, and its rows are what is missing.
+    const batch = existing ?? (await insertBatch(input, fingerprint, validation));
     await insertRows(batch.id, input, validation);
+    await markRowsWritten(batch.id);
 
     let status: string = validation.status;
     let reference: string | null = null;
